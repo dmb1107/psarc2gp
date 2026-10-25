@@ -1,0 +1,17 @@
+{
+  "name": "psarc2gp",
+  "version": "0.1.0",
+  "description": "Convert Rocksmith 2014 CDLC (.psarc) into Guitar Pro 8 files with the original recording embedded and per-beat sync points",
+  "type": "module",
+  "bin": { "psarc2gp": "bin/psarc2gp.js" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/",
+    "convert": "node bin/psarc2gp.js"
+  },
+  "dependencies": {
+    "@coderline/alphatab": "1.8.4"
+  },
+  "license": "MIT",
+  "private": true
+}
