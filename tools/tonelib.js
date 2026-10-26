@@ -61,7 +61,7 @@ export function toneLibToAlphaTex(songBuf) {
         });
         const beff = [];
         if (ba.dotted === "1") beff.push("d");
-        if (ba.tuplet) beff.push(`tu ${ba.tuplet}`);
+        if (ba.n && ba.t) beff.push(`tu ${ba.n} ${ba.t}`); // n notes in the time of t
         const body = !notes.length ? "r" : notes.length === 1 ? notes[0] : `(${notes.join(" ")})`;
         return `${body}.${ba.duration}${beff.length ? `{${beff.join(" ")}}` : ""}`;
       });

@@ -59,11 +59,23 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
         └─ alphaTab: alphaTex + audio + per-beat sync points → Guitar Pro 7/8 file
 ```
 
-Rocksmith charts store notes as timestamps, not rhythms. Each note is placed on its measure's beat grid
-using the finest subdivision that beat needs, so a note's written position maps back to its Rocksmith time.
-Across the test songs, half of all notes are within 0.5 ms of the chart and 95 % within 15 ms. Loosely
-timed charts reach about 35 ms at worst. Notation agrees with ToneLib's on 100 % of onsets and 99.8 % of
-durations for the chart it was checked against.
+Rocksmith charts store notes as timestamps, not rhythms. Each beat gets the grid (16ths, 8th or 16th
+triplets, 32nds, 64ths) with the lowest timing error plus a small readability cost, so plain 16ths win
+unless a finer grid clearly fits better. On the six test songs, 95 % of notes on every track land within
+1 ms of their Rocksmith time; the worst cases (about 40 ms) are main notes right after grace notes in
+loosely charted runs. Against ToneLib's notation of the same charts, 96–100 % of note onsets agree.
+
+### Notation choices (where it intentionally differs from ToneLib)
+
+- **Notes the chart gives no length** (most guitar chords, many bass notes) fill to the next note but stop
+  at the bar line. In Rocksmith no sustain means a short hit, and this avoids guessed ties across bars.
+  Notes the chart *does* sustain are held as charted, through to the next note if they end within a beat of it.
+- **Linked notes** (Rocksmith "link next", e.g. a held note ending in a slide) are written as ties,
+  not re-picked notes.
+- **Quick slides and hammer-ons into a note** become grace notes: on the beat if the grace is on the
+  grid, before the beat if the main note is.
+- **Triplet beats** use one note value per beat with ties, so tuplet groups are always complete.
+- **Count-in:** charts that start well into the recording get rest bars in front so the intro plays.
 
 ### What gets converted
 

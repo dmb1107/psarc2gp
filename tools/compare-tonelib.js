@@ -41,9 +41,9 @@ function compareTracks(a, b, offset) {
     const x = barNotes(a.staves[0].bars[i]);
     const y = barNotes(tb);
     for (const [k, len] of x) {
-      if (y.has(k)) { matched++; if (y.get(k) === len) sameLen++; } else { onlyOurs++; if (diffs.length < 8) diffs.push(`bar ${i + 1}: ours has ${k}`); }
+      if (y.has(k)) { matched++; if (y.get(k) === len) sameLen++; } else { onlyOurs++; if (diffs.length < (+process.env.DIFFS || 8)) diffs.push(`bar ${i + 1}: ours has ${k}`); }
     }
-    for (const k of y.keys()) if (!x.has(k)) { onlyTl++; if (diffs.length < 8) diffs.push(`bar ${i + 1}: ToneLib has ${k}`); }
+    for (const k of y.keys()) if (!x.has(k)) { onlyTl++; if (diffs.length < (+process.env.DIFFS || 8)) diffs.push(`bar ${i + 1}: ToneLib has ${k}`); }
   }
   return { matched, onlyOurs, onlyTl, sameLen, diffs };
 }
@@ -51,7 +51,7 @@ function compareTracks(a, b, offset) {
 let offset = offsetArg !== undefined ? +offsetArg : null;
 if (offset === null) {
   let best = -1;
-  for (let o = -4; o <= 4; o++) {
+  for (let o = -12; o <= 12; o++) {
     const r = compareTracks(ours.tracks[0], tl.tracks[0], o);
     if (r.matched > best) { best = r.matched; offset = o; }
   }

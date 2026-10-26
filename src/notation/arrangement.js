@@ -27,16 +27,25 @@ export function tuningOf(arr) {
   return base.map((b, i) => b + (arr.tuning[i] ?? 0) + octave); // lowest string first
 }
 
+// Readability cost (in beats) of each grid: plain 16ths are free, finer or tuplet grids must earn
+// their place by fitting the chart clearly better.
+const GRID_COST = new Map([[12, 0], [16, 0.01], [8, 0.02], [6, 0.015], [3, 0.03]]);
+
+// Pick the grid with the lowest (timing error + readability cost) for the onsets in one beat. A grid
+// only qualifies if every onset is within a fifth of its spacing (and within SNAP_TOLERANCE), so a
+// fine grid can't claim notes that merely sit near one of its many lines. The 64th grid is the
+// fallback that always fits.
 function chooseGrid(fracs, beatTicks) {
-  const steps = GRID_STEPS.filter((s) => beatTicks % s === 0);
   let best = null;
-  for (const step of steps) {
+  for (const step of GRID_STEPS.filter((s) => beatTicks % s === 0)) {
     const slots = beatTicks / step;
     const err = Math.max(...fracs.map((f) => Math.abs(f * slots - Math.round(f * slots)) / slots));
-    if (err <= SNAP_TOLERANCE) return { step, offGrid: false };
-    if (!best || err < best.err) best = { step, err };
+    const fits = step === 3 || err <= Math.min(SNAP_TOLERANCE, 0.2 / slots);
+    if (!fits) continue;
+    const cost = err + GRID_COST.get(step);
+    if (!best || cost < best.cost) best = { step, cost, err };
   }
-  return { step: best?.step ?? 12, offGrid: true };
+  return best ? { step: best.step, offGrid: false } : { step: 12, offGrid: true };
 }
 
 export function convertArrangement(arr, measures, { warn = () => {} } = {}) {
@@ -62,8 +71,14 @@ export function convertArrangement(arr, measures, { warn = () => {} } = {}) {
     const hopoInto = (b.mask & (M.HAMMER_ON | M.PULL_OFF)) !== 0 && b.fret !== a.fret;
     if (gap > 0 && gap < Math.min(0.08, 0.1 * beatLen) && (slideInto || hopoInto)) {
       isGrace.add(a);
-      // an on-beat grace delays the main note by its own length: pick the value closest to the gap
-      graceOf.set(b, { fret: a.fret, eff: slideInto ? (b.mask & M.CHILD ? "sl" : "ss") : "h", time: a.time, dur: gap / beatLen >= 0.09 ? "32" : "64" });
+      // Whichever of the two notes sits on the beat grid keeps the rhythmic position: if the grace
+      // does, it's an on-beat grace and the main note is written at the grace's position; if the main
+      // note does, the grace goes just before the beat. The grace's value is closest to the gap.
+      const onBeat = gridDistance(measures, a.time) < gridDistance(measures, b.time);
+      graceOf.set(b, {
+        fret: a.fret, eff: slideInto ? (b.mask & M.CHILD ? "sl" : "ss") : "h",
+        type: onBeat ? "ob" : "bb", time: onBeat ? a.time : b.time, dur: gap / beatLen >= 0.09 ? "32" : "64",
+      });
     }
   }
 
@@ -164,7 +179,7 @@ export function convertArrangement(arr, measures, { warn = () => {} } = {}) {
       addNote(n.string, n.fret, n.mask, { slideTo: n.slideTo, slideUnpitchTo: n.slideUnpitchTo, vibrato: n.vibrato, bends: n.bends, tap: n.tap, slap: n.slap, pluck: n.pluck });
       const g = graceOf.get(n);
       if (g) {
-        (ev.grace ??= []).push({ string: nStrings - n.string, fret: g.fret, eff: g.eff, dur: g.dur });
+        (ev.grace ??= []).push({ string: nStrings - n.string, fret: g.fret, eff: g.eff, dur: g.dur, type: g.type });
         graceNotes++;
       }
     }
@@ -250,6 +265,18 @@ export function convertArrangement(arr, measures, { warn = () => {} } = {}) {
     beats64th: steps.filter((s) => s === 3).length, unsnappedBeats: offGridBeats,
   };
   return { bars: bars.map((pieces) => pieces.map(pieceToTex).join(" ")), tuning, nStrings, isBassRange, stats };
+}
+
+// distance (in beats) from time t to the nearest 16th-note line of its beat
+function gridDistance(measures, t) {
+  const mi = measureAt(measures, t);
+  if (mi < 0) return 1;
+  const m = measures[mi];
+  const grid = [...m.beatTimes, m.end];
+  let j = 0;
+  while (j + 1 < grid.length - 1 && grid[j + 1] <= t) j++;
+  const f = (t - grid[j]) / (grid[j + 1] - grid[j]);
+  return Math.abs(f * 4 - Math.round(f * 4)) / 4;
 }
 
 function beatOf(measures, tick) {
@@ -350,7 +377,7 @@ function pieceToTex(pc) {
   let grace = "";
   if (pc.first && pc.ev.grace) {
     const g = pc.ev.grace.map((x) => `${x.fret}.${x.string}{${x.eff}}`);
-    grace = `${g.length === 1 ? g[0] : `(${g.join(" ")})`}.${pc.ev.grace[0].dur ?? "32"}{gr ob} `;
+    grace = `${g.length === 1 ? g[0] : `(${g.join(" ")})`}.${pc.ev.grace[0].dur ?? "32"}{gr ${pc.ev.grace[0].type ?? "ob"}} `;
   }
   return `${grace}${body}.${dur}${beatEff.length ? `{${beatEff.join(" ")}}` : ""}`;
 }

@@ -35,7 +35,8 @@ export function verify(psarcBuf) {
     track.staves[0].bars.forEach((bar, bi) => {
       const mb = score.masterBars[bi];
       const want = mb.calculateDuration();
-      const got = bar.voices[0].beats.reduce((s, b) => s + b.playbackDuration, 0);
+      // notated length (tuplets and dots included; grace notes count 0)
+      const got = bar.voices[0].beats.reduce((s, b) => s + b.displayDuration, 0);
       if (got !== want) incomplete++;
       for (const b of bar.voices[0].beats) for (const n of b.notes) {
         // alphaTab's model numbers strings from the lowest (1); Rocksmith from the lowest (0)
