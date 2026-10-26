@@ -47,7 +47,7 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Synth instruments play in time with the recording (Guitar Pro RSE sounds, not MIDI) | ◐ written as RSE; the user confirmed RSE fixes the lag, the new files not yet opened in GP8 |
 | Open with only the recording audible; instrument tracks muted until the user unmutes one | ◐ same |
 | Notation + tab for every arrangement, readable and editable in Guitar Pro 8 | ✅ (one file confirmed in GP8 by the user; the rest checked by re-opening and rendering) |
-| Right-click "Send to" conversion on Windows, single files, multiple files, or folders | ◐ scripts written, not yet run on Windows |
+| Right-click "Send to" conversion on Windows, single files, multiple files, or folders | ✅ installed and run on the user's PC (Windows 11) through Explorer's drop handler: a file, a folder, 101 files, odd names; the menu click itself not yet done by hand |
 | Never overwrite a `.gp` the user may have edited, unless they ask (separate "overwrite" entry) | ✅ |
 | Works offline and runs in seconds per song | ✅ (1–3 s) |
 
@@ -87,8 +87,11 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
   by bass-onset detection on one song).
 - Agreement with ToneLib's notation of the same charts: 96–100 % of note onsets.
 - The embedded audio matches ToneLib's decode of the same song (correlation 0.998–0.999, zero offset).
+- On the user's whole library (206 charts): every chart converts with complete bars and every note;
+  p95 onset error ≤ 1 ms for 74 % of songs. The 15 % over 10 ms are charts whose notes aren't on their
+  own beat grid (HANDOFF.md, "Library sweep").
 
-Any change should keep these, and `tools/verify.js` / `npm test` measure them.
+Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm test` measure them.
 
 ## Decision log
 
@@ -120,6 +123,10 @@ Any change should keep these, and `tools/verify.js` / `npm test` measure them.
 8. **RSE sounds and muted instrument tracks by default** (the user's request after finding the synth
    late). Guitar Pro's MIDI output lags the audio track; RSE doesn't. Guitar sounds follow the chart's
    Rocksmith tones; bass parts (including a bass charted in a guitar slot) get the finger bass.
+9. **Send To entries start `node.exe` directly, no `.cmd` wrapper.** Tested on the user's PC: through
+   cmd.exe a name with `&` was cut short (the rest run as a command) and 101 selected files started
+   nothing ("command line too long", limit ~75 files). Started directly, all 101 arrived intact (limit
+   ~280 long paths). The pause/close-after-10-s behaviour moved into the CLI (`--pause`).
 
 ## Observations from real use
 

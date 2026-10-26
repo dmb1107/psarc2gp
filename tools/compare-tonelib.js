@@ -15,10 +15,12 @@ const [psarcPath, songPath, offsetArg] = process.argv.slice(2);
 const ours = alphaTab.importer.ScoreLoader.loadAlphaTex(buildAlphaTex(loadSong(fs.readFileSync(psarcPath))).tex, new alphaTab.Settings());
 const tl = loadToneLib(fs.readFileSync(songPath));
 
-// struck notes per bar: "onset@string/fret" with onset in ticks from the bar start, plus durations
+// struck notes per bar: "onset@open/fret" with onset in ticks from the bar start and the string named by
+// its open pitch (ToneLib may give a 4-string bass part 5 strings, which renumbers them), plus durations
 function barNotes(bar) {
   const out = new Map();
   const voice = bar.voices[0];
+  const tuning = bar.staff.tuning; // highest string first; alphaTab's note.string counts from the lowest
   voice.beats.forEach((b, bi) => {
     for (const n of b.notes) {
       if (n.isTieDestination) continue;
@@ -26,7 +28,7 @@ function barNotes(bar) {
       let len = b.playbackDuration;
       let cur = n;
       while (cur.tieDestination) { cur = cur.tieDestination; len += cur.beat.playbackDuration; }
-      out.set(`${b.playbackStart}@${n.string}/${n.fret}`, len);
+      out.set(`${b.playbackStart}@${tuning[tuning.length - n.string]}/${n.fret}`, len);
     }
   });
   return out;

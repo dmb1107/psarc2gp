@@ -16,6 +16,7 @@ npm install
 npm test                                   # unit tests; integration tests run if .samples/ has charts
 node bin/psarc2gp.js [-f] [-o dir] <file.psarc | folder> ...
 node tools/verify.js .samples/*.psarc      # bars complete, notes present, onset error vs chart
+node tools/sweep.js <folder> ...           # verify.js on a whole library, converted in memory
 node tools/compare-tonelib.js X.psarc X.song
 node tools/roundtrip.js out/*.gp           # re-open .gp files and report what Guitar Pro will see
 node tools/render-check.cjs out/*.gp [--png dir]   # render every track in headless Chromium (needs Playwright)
@@ -32,7 +33,8 @@ src/audio/          Wwise → Ogg (ww2ogg port), Ogg page writer, packed codeboo
 src/notation/       timeline (bars, meters, count-in, sync points), arrangement (grid choice, durations,
                     techniques), score (assembles alphaTex)
 src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
-windows/            Send To installer and wrappers (CRLF line endings, see .gitattributes)
+windows/            Send To installer (CRLF line endings, see .gitattributes; keep the .ps1 ASCII-only,
+                    Windows PowerShell 5.1 reads BOM-less files as ANSI)
 tools/              verification and debugging helpers; tools/tonelib.js reads ToneLib .song as a test oracle
 test/               node:test; samples.test.js uses real charts from .samples/
 ```
@@ -75,3 +77,11 @@ test/               node:test; samples.test.js uses real charts from .samples/
   time to grace notes from neighbouring beats.
 - ToneLib re-bars count-ins, so its bar numbers are offset from ours by a constant; the comparison
   tool detects the offset.
+- Send To entries must start `node.exe` directly, never through a `.cmd`. Explorer quotes a dropped
+  path only if it has a space, so cmd.exe splits names at `&` (and would run the rest as a command), eats
+  `^`, and refuses command lines over 8191 characters (about 75 files). A direct start takes ~32,000
+  characters. Explorer itself expands `%NAME%` in dropped names; nothing can undo that.
+- Song metadata comes from the instrument manifests; vocals manifests have no SongName/ArtistName and
+  can come first in the archive.
+- Some charts aren't on their own beat grid (notes 15–30 ms off the nearest 16th). verify.js then
+  reports p95 onset errors of 10–30 ms; that's the chart, not a regression (see HANDOFF.md).

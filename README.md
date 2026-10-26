@@ -17,12 +17,17 @@ synthesized instrument without drifting.
 1. Install [Node.js](https://nodejs.org) 20 or newer (the LTS installer is fine).
 2. Put this folder somewhere permanent, e.g. `C:\Tools\psarc2gp`.
 3. Double-click `windows\install.cmd`. It installs the one dependency and adds two entries to the
-   **Send to** menu. `windows\uninstall.cmd` removes them.
+   **Send to** menu. `windows\uninstall.cmd` removes them. The entries run Node.js from where it is
+   installed now; if you move this folder or reinstall Node.js somewhere else, run `install.cmd` again.
 
 ## Use
 
 Select one or more `.psarc` files (or a folder of them), right-click, **Send to → Guitar Pro (synced)**.
 On Windows 11 the Send to menu is under **Show more options** (or press Shift+F10).
+A folder converts the `.psarc` files directly inside it, not those in subfolders. Windows hands over at
+most about 32,000 characters of file names (a few hundred files); for more, send their folder.
+A window shows the progress and closes 10 seconds after it's done; if a file failed, it stays open until
+you press a key.
 
 `Artist - Title.gp` is written next to each `.psarc`. If that file already exists it is left alone, so
 edits you made in Guitar Pro are never overwritten; use **Guitar Pro (synced, overwrite)** to regenerate.
@@ -39,6 +44,7 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
       --no-mute     leave the instrument tracks unmuted
       --midi        General MIDI sounds instead of RSE (these lag the recording in Guitar Pro)
       --atex        also write the intermediate alphaTex (.atex) for debugging
+      --pause       keep the console window open when done (used by the Send To entries)
   -q, --quiet       only print errors
 ```
 
@@ -118,6 +124,7 @@ verification and next steps: [docs/HANDOFF.md](docs/HANDOFF.md).
 npm install
 npm test                       # unit tests; plus integration tests if ./.samples has .psarc files
 node tools/verify.js a.psarc   # bar completeness, every note present, onset error vs Rocksmith times
+node tools/sweep.js folder     # the same checks on every .psarc in a folder, converted in memory
 node tools/compare-tonelib.js a.psarc a.song   # notation vs a ToneLib export of the same chart
 node tools/inspect.js a.psarc  # what's inside
 node tools/tex.js a.psarc out.atex   # the generated alphaTex
@@ -136,7 +143,7 @@ src/rocksmith/           PSARC archive, SNG arrangements, song loader
 src/audio/               Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks
 src/notation/            timeline (bars, meters, sync), arrangement (quantizing, techniques), score
 src/gp/                  RSE sounds patched into the .gp, minimal zip rewrite
-windows/                 Send To installer and wrappers
+windows/                 Send To installer (the entries start node.exe directly)
 tools/                   verification and debugging helpers
 ```
 

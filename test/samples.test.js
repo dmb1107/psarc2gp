@@ -20,6 +20,11 @@ test("sample songs", { skip: files.length ? false : "no samples (see test/sample
     await t.test(path.basename(file), async (t) => {
       const buf = fs.readFileSync(file);
 
+      await t.test("metadata: artist and title (they name the .gp file)", () => {
+        const { meta } = loadSong(buf);
+        assert.ok(meta.artist && meta.title, `artist ${meta.artist}, title ${meta.title}`);
+      });
+
       await t.test("notation: bars full, every note present, onsets on their Rocksmith times", () => {
         const r = verify(buf);
         assert.deepEqual(r.problems, []);

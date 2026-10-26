@@ -19,14 +19,15 @@ export function loadSong(psarcBuffer) {
     const sngPath = sngDir + key + ".sng";
     if (!archive.has(sngPath)) continue;
     const sng = parseSng(decryptSng(archive.read(sngPath), { mac }));
-    meta ??= {
-      title: attrs.SongName, artist: attrs.ArtistName, album: attrs.AlbumName, year: attrs.SongYear,
-      length: attrs.SongLength, charter: attrs.CharterName ?? attrs.PackageAuthor,
-    };
     if (attrs.ArrangementName === "Vocals" || key.endsWith("_vocals")) {
       vocals = sng.vocals;
       continue;
     }
+    // vocals manifests carry no song name or artist, and can come first in the archive
+    meta ??= {
+      title: attrs.SongName, artist: attrs.ArtistName, album: attrs.AlbumName, year: attrs.SongYear,
+      length: attrs.SongLength, charter: attrs.CharterName ?? attrs.PackageAuthor,
+    };
     const props = attrs.ArrangementProperties ?? {};
     arrangements.push({
       key,

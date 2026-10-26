@@ -1,5 +1,6 @@
 // Re-open written .gp files with alphaTab and report what Guitar Pro will see.
 import fs from "node:fs";
+import path from "node:path";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const alphaTab = require("@coderline/alphatab");
@@ -11,5 +12,5 @@ for (const f of process.argv.slice(2)) {
   });
   const sp = s.masterBars.flatMap((m) => m.syncPoints ?? []);
   const mono = sp.every((p, i) => !i || p.syncPointValue.millisecondOffset >= sp[i - 1].syncPointValue.millisecondOffset);
-  console.log(`${f.split("/").pop()}: ${s.tracks.length} tracks [${s.tracks.map((t) => `${t.name}/${t.staves[0].tuning.length}str/prog${t.playbackInfo.program}`).join(", ")}], ${s.masterBars.length} bars, incomplete ${incomplete}, sync ${sp.length} (monotonic ${mono}), audio ${(s.backingTrack?.rawAudioFile?.length / 1e6).toFixed(2)} MB, sections ${s.masterBars.filter((m) => m.section).length}`);
+  console.log(`${path.basename(f)}: ${s.tracks.length} tracks [${s.tracks.map((t) => `${t.name}/${t.staves[0].tuning.length}str/prog${t.playbackInfo.program}`).join(", ")}], ${s.masterBars.length} bars, incomplete ${incomplete}, sync ${sp.length} (monotonic ${mono}), audio ${(s.backingTrack?.rawAudioFile?.length / 1e6).toFixed(2)} MB, sections ${s.masterBars.filter((m) => m.section).length}`);
 }

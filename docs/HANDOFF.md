@@ -1,19 +1,23 @@
 # Handoff: state of the project (2026-10-25)
 
-Written at the end of the first build session, for whoever picks up the work next. Product intent
-and decisions are in [PRODUCT.md](PRODUCT.md). How to do the next things is up to you.
+Written at the end of the first build session and updated at the end of the second, the first on the
+user's Windows PC, for whoever picks up the work next. Product intent and decisions are in
+[PRODUCT.md](PRODUCT.md). How to do the next things is up to you.
 
 ## Where things stand
 
 The full pipeline works end to end: `.psarc` → Guitar Pro 8 `.gp` with notation, embedded audio and
-per-beat sync. It has been run on six real charts (13 arrangements) and checked several ways
-(below). The user has bought Guitar Pro 8 and confirmed an earlier test file plays in sync there.
+per-beat sync. It is installed on the user's Windows PC at `C:\Tools\psarc2gp` with working Send To
+entries, and converts all 206 charts in their library (below). The user has bought Guitar Pro 8 and
+confirmed an earlier test file plays in sync there.
 
 History (see `git log`):
 1. PSARC/SNG reader and Wwise → Ogg converter (ww2ogg port)
 2. Notation converter, `.gp` output with per-beat sync, CLI, Windows Send To, tests
 3. Notation fixes from comparisons against ToneLib on four charts
 4. RSE sounds and muted instrument tracks by default (fixes the synth lagging the recording)
+5. Windows: Send To entries start node.exe directly; song names no longer lost when the vocals manifest
+   comes first; `tools/sweep.js` (branch `windows-sendto-node`)
 
 ## Evidence
 
@@ -25,11 +29,66 @@ History (see `git log`):
 | Masayoshi Takanaka – Oh! Tengo Suerte | Bass (odd meters, fast runs) | 721 | 0.8 ms | 96 % |
 | Thundercat – No More Lies | Bass (E♭) | 613 | 0.5 ms | no .song yet |
 | Thundercat – Them Changes | Bass, Bass 2 (B-E-A-D), 6-string bass | 2,177 | 0.5 ms | no .song yet |
+| Olivia Rodrigo – brutal (vocals manifest first) | Lead, Rhythm, Bass | 2,362 | 0.5 ms | no .song |
 
 Also checked: every bar complete in every track; every chart note present; each `.gp` re-opens with
 its audio and all sync points; every track renders in alphaTab without errors; the converted audio
 matches ToneLib's decode; Ogg output passes ffmpeg's strict CRC check and reports the exact sample count.
 The ToneLib differences that remain are deliberate or judgment calls (PRODUCT.md, decision 6).
+
+## Windows: verified on the user's PC (2026-10-25)
+
+Windows 11 Pro (build 26200), Node.js 24.22.1 and Git 2.56 (installed with winget). On this PC
+`.samples/` holds Skate, Destroyed by Hippie Powers, Oh! Tengo Suerte and brutal: `npm test` passes
+40/40 and `tools/verify.js` gives the numbers above.
+
+- `windows\install.cmd` installs the dependency and creates the two Send To shortcuts. They now start
+  `node.exe bin\psarc2gp.js --pause [--force]` directly and carry Guitar Pro's icon.
+- Real Explorer drops, made through the shell's `IDropTarget` on the installed shortcuts (what the
+  Send To menu calls), with real charts: a folder of two songs, a single song, the same song again
+  (skipped, `.gp` untouched), the overwrite entry (replaced), and a corrupt file (the window stays open
+  until a key is pressed; otherwise it closes 10 s after finishing). The `.gp` files re-open with all
+  tracks, sync points and audio.
+- **Why no `.cmd` wrapper any more.** Explorer quotes a dropped path only if it contains a space, so
+  through `cmd.exe /c wrapper.cmd %*`:
+
+  | Dropped | Through the old `.cmd` | Starting node.exe directly |
+  |---|---|---|
+  | `Simon&Garfunkel_p.psarc` | cut at `&`; cmd runs the rest as a command | intact |
+  | `a^b_p.psarc` | `^` removed | intact |
+  | 101 files (11,500 characters) | nothing runs: "The command line is too long" (8191 limit) | all 101 |
+  | 280 files (31,900 characters) | nothing runs | all 280 |
+  | 340 files (38,800 characters) | nothing runs | nothing runs (Windows' 32,767 limit) |
+  | `100%PATH%_p.psarc` | `%PATH%` expanded | `%PATH%` expanded: Explorer does this itself |
+
+  None of the user's 206 file names contains these characters, but selecting all 101 charts in their
+  backup folder would have failed.
+- Not verified: the right-click menu itself, clicked by hand (the drop handler behind it was); and
+  double-clicking `install.cmd` from a zip that Explorer extracted (the files then carry the internet
+  zone mark, so Windows may ask before running it).
+
+## Library sweep (2026-10-25)
+
+`node tools/sweep.js <folders>` converts every chart in memory and runs the verify.js checks. On the
+user's library (`Downloads` and `Documents\backup_music_stuff\Rocksmith_Custom_DLC`, 206 files,
+484 arrangements, 453,000 notes):
+
+- All 206 convert, about 2 s each. No incomplete bars, no missing notes.
+- 11 (5 %) had lost their artist and title: the vocals manifest came first in the archive and has
+  neither, so every one of them would have been written as `Unknown - Untitled.gp` and all but the first
+  skipped. Fixed (metadata now comes from the instrument manifests); the samples test checks it.
+- Onset error, worst track per song: p95 ≤ 1 ms for 153 songs, 1–10 ms for 22, over 10 ms for 31
+  (15 %). The last group are charts whose notes aren't on their own beat grid: notes sit 15–30 ms off the
+  nearest 16th (e.g. Sweet Child O' Mine lead, median −20 ms; most Tame Impala and Sticky Fingers charts),
+  so the best grid still leaves that much error. Sync points (the recording) are unaffected; it shows as
+  synth timing and as finer note values in the score. Two bass tracks stand out: J. Cole – Crooked Smile
+  (one note 185 ms off, p95 0.8 ms) and Kendrick Lamar – Bitch, Don't Kill My Vibe (p95 56 ms).
+- STRFKR – Rawnald Gregory Erickson II has a ToneLib export (`Documents\backup_music_stuff\Tonelib`).
+  It is one of the loose charts (p95 19–28 ms), and its bass was charted on a different tempo map: its
+  beats drift up to 300 ms from the guitars' (the converter warns and writes all tracks on the first
+  track's grid; bass notes still land within 28 ms of their chart times). ToneLib's onsets agree 46 %
+  (Lead), 21 % (Rhythm), 2 % (Bass), so it's kept out of `.samples` (it would fail the thresholds).
+  ToneLib gives that bass 5 strings; `compare-tonelib.js` now names strings by their open pitch.
 
 ## Resolved: synth lagged the recording in Guitar Pro
 
@@ -61,8 +120,7 @@ user to rule out the chart by ear; rendering such clips would make a useful veri
 
 ## Not yet verified
 
-- **Windows install and Send To.** `windows/*.cmd` and `install-sendto.ps1` were written without a
-  Windows machine. This is the user's primary way of using the tool, so it's the first thing to check.
+- **The Send To menu clicked by hand** (everything behind it is verified, see above).
 - **Guitar Pro 8 with the latest files.** The user opened earlier builds in GP8; the current output
   (RSE sounds, muted tracks) has only been checked by re-opening with alphaTab and comparing the XML with
   Guitar Pro's own files.
@@ -81,6 +139,10 @@ Charts are copyrighted and must never be committed. The user has the files. Put 
 
 With samples present, `npm test` runs the integration tests on every song; without them they skip.
 
+On the user's PC the library is in `%USERPROFILE%\Downloads` and
+`%USERPROFILE%\Documents\backup_music_stuff\Rocksmith_Custom_DLC`; ToneLib exports are in
+`...\backup_music_stuff\Tonelib`.
+
 ## How to tell a change is good
 
 1. `npm test` passes with all samples present.
@@ -94,21 +156,26 @@ With samples present, `npm test` runs the integration tests on every song; witho
    Several real problems this session were only visible that way (wrong clef/octave, tempo-mark
    clutter, a renderer crash on mixed tuplets).
 5. Re-convert the samples and re-open them (`tools/roundtrip.js`).
+6. For changes to parsing or notation, `node tools/sweep.js <library folders>` before and after: no new
+   failures, nothing incomplete or missing, the p95 distribution no worse.
 
 ## Suggested next steps
 
 In rough priority order; these are outcomes, not implementation plans.
 
-1. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
-   files, and a folder; open the results in Guitar Pro 8; confirm sync, RSE sounds, muted instrument
-   tracks, audio-track mute/solo, speed change, looping. Fix whatever breaks.
+1. **Finish proving the Windows experience in Guitar Pro 8** (the user): right-click → Send to on a few
+   songs, open the results, confirm sync, RSE sounds, muted instrument tracks, audio-track mute/solo,
+   speed change, looping, and the low B of Them Changes. Fix whatever breaks.
 2. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
    taste (e.g. chord lengths when the chart gives none, grace notes, triplets).
-3. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
+3. **Loosely charted songs** (15 % of the user's library, see "Library sweep"): decide how to write
+   notes that sit 15–30 ms off the grid (fine 32nd/64th offsets vs. the readable beat position), and
+   look at the two outlier bass tracks. Measure with `tools/sweep.js`.
+4. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
-4. **Lyrics / vocal melody track.**
-5. Remaining techniques: strum direction, let-ring, fingering.
-6. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
+5. **Lyrics / vocal melody track.**
+6. Remaining techniques: strum direction, let-ring, fingering.
+7. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
 
 ## Known quirks
 
