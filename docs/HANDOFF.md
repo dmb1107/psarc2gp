@@ -30,6 +30,29 @@ its audio and all sync points; every track renders in alphaTab without errors; t
 matches ToneLib's decode; Ogg output passes ffmpeg's strict CRC check and reports the exact sample count.
 The ToneLib differences that remain are deliberate or judgment calls (PRODUCT.md, decision 6).
 
+## Open issue: synth may lag the recording in Guitar Pro
+
+The user hears the synth bass late against the recording in *Destroyed by Hippie Powers*, bar 56 (the
+`9 9` notes), with the recording turned down and the bass track up. Investigated:
+
+- **Chart vs recording:** fine. Measured from the bass's own pitch (energy at the note's harmonics),
+  the recorded F♯ notes in bars 56–57 start within −15…+17 ms of the chart times. Across the song the
+  chart sits within a few ms of the recording (one section around 4:10–4:25 measured ~+37 ms, but that
+  measurement is noisy).
+- **Converter vs chart:** fine. Notes in bar 56 are written exactly on their 8th-note positions, and
+  the sync points carry the exact beat times (frame offsets) and matching tempos.
+- **Likely cause:** alphaTab writes every track with `<AudioEngineState>MIDI</AudioEngineState>`, so
+  Guitar Pro plays the synth through its **MIDI output** (on Windows usually the Microsoft GS Wavetable
+  Synth, which adds its own latency) instead of its built-in RSE engine, which runs alongside the audio
+  track. Guitar Pro's docs mention a delay between RSE and MIDI and a MIDI latency setting
+  (Preferences → Audio/MIDI).
+
+To confirm with the user: switch the bass track to an RSE sound in Guitar Pro's track inspector (or
+calibrate MIDI latency) and replay bar 56. If RSE fixes it, the converter should produce tracks that
+use RSE sounds by default. That needs testing in Guitar Pro 8, since alphaTab doesn't write RSE sound banks.
+A reference clip (recording plus a zero-latency synth at the chart's note times) was made for the
+user to rule out the chart by ear; rendering such clips would make a useful verification tool.
+
 ## Not yet verified
 
 - **Windows install and Send To.** `windows/*.cmd` and `install-sendto.ps1` were written without a
@@ -67,16 +90,17 @@ With samples present, `npm test` runs the integration tests on every song; witho
 
 In rough priority order; these are outcomes, not implementation plans.
 
-1. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
+1. **Resolve the synth-lag issue above** (RSE vs MIDI engine), since sync is the product's core promise.
+2. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
    files, and a folder; open the results in Guitar Pro 8; confirm sync, audio-track mute/solo, speed
    change, looping. Fix whatever breaks.
-2. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
+3. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
    taste (e.g. chord lengths when the chart gives none, grace notes, triplets).
-3. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
+4. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
-4. **Lyrics / vocal melody track.**
-5. Remaining techniques: strum direction, let-ring, fingering.
-6. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
+5. **Lyrics / vocal melody track.**
+6. Remaining techniques: strum direction, let-ring, fingering.
+7. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
 
 ## Known quirks
 

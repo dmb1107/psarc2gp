@@ -124,6 +124,9 @@ Any change should keep these, and `tools/verify.js` / `npm test` measure them.
   cursor. **Decided not to compensate in the file**: shifting sync points would put the synth out of
   time with the recording and be wrong on other machines.
 - Guitar Pro desktop has no dark score page (confirmed by Arobas support). The user will revisit this.
+- With the recording turned down and the synth bass up, the user hears some synth notes late (Destroyed
+  by Hippie Powers, bar 56). The chart and the file were checked and are aligned; the suspected cause is
+  the tracks using Guitar Pro's MIDI output instead of RSE. See HANDOFF.md, "Open issue".
 
 ## Open questions for the user
 
