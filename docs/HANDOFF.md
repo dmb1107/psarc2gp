@@ -93,10 +93,20 @@ IInitializeWithFile, colours, SetWindow/DoPreview into a window, then screenshot
   preview of a file from Downloads (internet zone mark) did change it and a repeat didn't; most likely
   Defender scanning the file the first time it was opened.
 
-Not verified: the preview in Explorer itself, clicked by the user; keyboard shortcuts typed while the
-preview has focus (Explorer's own, like F5, aren't forwarded to Explorer, and the browser's are off);
-Explorer passing its own colours in dark mode (if it doesn't, the add-in follows Windows' app theme,
-which is what the user's dark mode was tested with).
+First try in Explorer: "No preview available." Explorer never started a preview host. Cause: the
+installer had been run from Claude's shell, whose HKCU registry writes (the .gp association and the
+preview handler list) only that shell can see; WMI showed them missing. The HKLM class, written by the
+elevated helper process, was fine. Fix: the user runs `windows\install-preview.cmd` themselves; the
+association moved to `.gp\shellex`. The machine-wide COM class rests on a wrong earlier diagnosis
+(per-user COM looked broken for the same reason) and could become per-user, without admin rights.
+
+In Explorer itself, after the user ran the installer: the preview works (the user confirmed), and at
+their request it now starts playing as soon as a song is selected. Checked in a real Explorer window
+(`explorer /separate,/select,<file>`, screenshot): plays by itself, and matches the dark Explorer.
+Explorer passes white and black to the add-in even in dark mode, so Windows' app theme decides.
+
+Not verified: keyboard shortcuts typed while the preview has focus (Explorer's own, like F5, aren't
+forwarded to Explorer, and the browser's are off).
 
 ## Library sweep (2026-10-25)
 

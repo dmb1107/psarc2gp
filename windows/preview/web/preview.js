@@ -10,7 +10,7 @@ const ALPHATAB = "/node_modules/@coderline/alphatab/dist/";
 const params = new URLSearchParams(location.search);
 const param = (name) => (/^[0-9a-f]{6}$/i.test(params.get(name) ?? "") ? `#${params.get(name)}` : null);
 const systemDark = matchMedia("(prefers-color-scheme: dark)").matches;
-const bg = param("bg") ?? (systemDark ? "#202020" : "#ffffff");
+const bg = param("bg") ?? (systemDark ? "#191919" : "#ffffff");
 const fg = param("fg") ?? (systemDark ? "#ffffff" : "#1b1b1b");
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const mix = (a, b, t) => `rgb(${rgb(a).map((v, i) => Math.round(v * t + rgb(b)[i] * (1 - t))).join(",")})`;
@@ -103,7 +103,13 @@ async function main() {
   const showTime = (now, end) => { $("time").textContent = `${clock(now)} / ${clock(end)}`; };
   // (no api.midiLoaded: in alphaTab 1.8.4 subscribing to it recurses forever when the synthesizer
   // plays, i.e. for files without a recording; the position events carry the length too)
-  api.playerReady.on(() => { play.disabled = false; seek.disabled = false; });
+  // start playing as soon as the song is ready; only once, so picking another track doesn't restart it
+  let autoplayed = false;
+  api.playerReady.on(() => {
+    play.disabled = false;
+    seek.disabled = false;
+    if (!autoplayed) { autoplayed = true; api.play(); }
+  });
   api.playerStateChanged.on((e) => {
     const playing = e.state === alphaTab.synth.PlayerState.Playing;
     play.classList.toggle("playing", playing);

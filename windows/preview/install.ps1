@@ -1,9 +1,9 @@
 # Builds the Explorer preview pane add-in for Guitar Pro (.gp) files and installs it.
 # Run windows\install-preview.cmd (or: powershell -ExecutionPolicy Bypass -File install.ps1 [-Uninstall])
 #
-# Explorer creates preview handlers out of process, through COM, and COM only notices a new per-user
-# (HKCU) class after the user signs in again. So the COM class is registered machine-wide (HKLM, one
-# admin prompt: this script runs itself elevated with -Machine); the .gp association stays per-user.
+# The COM class is registered machine-wide (HKLM, one admin prompt: this script runs itself elevated
+# with -Machine); the .gp association and the handler list entry are per-user. (Machine-wide was chosen
+# on a wrong diagnosis, see docs/HANDOFF.md; a fully per-user install would probably work too.)
 param([switch]$Uninstall, [switch]$Machine)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -12,8 +12,11 @@ $name = 'Guitar Pro preview (psarc2gp)'
 $clsid = '{97b4eb14-d693-49c4-b493-63f71eda831f}'
 $classKey = "HKLM:\SOFTWARE\Classes\CLSID\$clsid"
 $userClassKey = "HKCU:\Software\Classes\CLSID\$clsid" # where earlier versions registered it
-# {8895b1c6-...} is IPreviewHandler: the preview handler for .gp files, whichever app opens them
-$assocKey = 'HKCU:\Software\Classes\SystemFileAssociations\.gp\shellex\{8895b1c6-b41f-4c1c-a562-0d564250836f}'
+# {8895b1c6-...} is IPreviewHandler: the preview handler for .gp files, whichever app opens them. A
+# per-user .gp key with no values of its own leaves Guitar Pro's machine-wide "open" mapping in effect.
+$gpKey = 'HKCU:\Software\Classes\.gp'
+$assocKey = "$gpKey\shellex\{8895b1c6-b41f-4c1c-a562-0d564250836f}"
+$oldAssocKey = 'HKCU:\Software\Classes\SystemFileAssociations\.gp' # earlier versions; Explorer's preview pane ignores it
 $listKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PreviewHandlers'
 $dll = Join-Path $here 'bin\Psarc2gpPreview.dll'
 
@@ -71,9 +74,18 @@ function Invoke-Elevated([string[]]$extra) {
   if ($p.ExitCode -ne 0) { Write-Host "Registering the add-in failed (exit code $($p.ExitCode))." -ForegroundColor Yellow; exit 1 }
 }
 
+# remove a key only if nothing else is left in it (the .gp keys may be shared with other software)
+function Remove-EmptyKey([string]$path) {
+  if (-not (Test-Path -LiteralPath $path)) { return }
+  $k = Get-Item -LiteralPath $path
+  if ($k.ValueCount -eq 0 -and $k.SubKeyCount -eq 0) { Remove-Item -LiteralPath $path }
+}
+
 if ($Uninstall) {
   Invoke-Elevated @('-Uninstall')
-  foreach ($k in $assocKey, $userClassKey) { if (Test-Path -LiteralPath $k) { Remove-Item -LiteralPath $k -Recurse } }
+  foreach ($k in $assocKey, $userClassKey, $oldAssocKey) { if (Test-Path -LiteralPath $k) { Remove-Item -LiteralPath $k -Recurse } }
+  Remove-EmptyKey "$gpKey\shellex"
+  Remove-EmptyKey $gpKey
   if (Test-Path -LiteralPath $listKey) { Remove-ItemProperty -LiteralPath $listKey -Name $clsid -ErrorAction SilentlyContinue }
   Update-Explorer
   Stop-PreviewHost
@@ -103,7 +115,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host 'Registering (Windows will ask for admin rights)...'
 Invoke-Elevated @()
-if (Test-Path -LiteralPath $userClassKey) { Remove-Item -LiteralPath $userClassKey -Recurse }
+foreach ($k in $userClassKey, $oldAssocKey) { if (Test-Path -LiteralPath $k) { Remove-Item -LiteralPath $k -Recurse } }
 Initialize-Key $assocKey
 Set-ItemProperty -LiteralPath $assocKey -Name '(default)' -Value $clsid
 Initialize-Key $listKey

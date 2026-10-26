@@ -91,9 +91,15 @@ test/               node:test; samples.test.js uses real charts from .samples/
   reports p95 onset errors of 10–30 ms; that's the chart, not a regression (see HANDOFF.md).
 
 Explorer preview (windows/preview):
-- Explorer creates preview handlers out of process (prevhost.exe) through COM, and COM ignores a *new*
-  per-user (HKCU) out-of-process class until the user signs in again. So the class is in HKLM (the
-  installer elevates itself for that part); the .gp association stays in HKCU.
+- On the user's PC, registry writes to HKCU made from Claude Code's shell are invisible to every other
+  process (Explorer, COM): they land in a private view (the session runs under the Claude app's
+  package). `Test-Path` and `AssocQueryString` in that shell still see them. Read the real registry
+  through WMI (`Invoke-CimMethod -Namespace root/default -ClassName StdRegProv -MethodName EnumKey ...`)
+  and have the user run anything that must write HKCU. Files (the Send To shortcuts) are not affected.
+  This once looked like "COM ignores new per-user classes until sign-in" (wrong); that is why the
+  preview's COM class is in HKLM (the installer elevates itself for that part).
+- The preview handler is registered under `HKCU\Software\Classes\.gp\shellex\{8895b1c6-...}`, the
+  documented place and the one PowerToys uses for its previewers.
 - prevhost calls .NET objects on RPC threads (MTA). WinForms and WebView2 need an STA with a message
   loop: everything window-related runs on `UiThread`.
 - WebView2 can't start at low integrity: the class sets `DisableLowILProcessIsolation`. Its loader DLL is
@@ -104,5 +110,9 @@ Explorer preview (windows/preview):
   serves it to the page from memory; the page and alphaTab come from the project folder via a virtual host.
 - alphaTab 1.8.4: subscribing to `api.midiLoaded` recurses forever when the synthesizer plays (files
   without a recording). Don't use it.
+- Explorer passes white and black through IPreviewHandlerVisuals even in dark mode; Windows' app theme
+  (`AppsUseLightTheme`) decides, and dark uses Explorer's own #191919.
+- The preview starts playing on its own: the WebView2 environment is created with
+  `--autoplay-policy=no-user-gesture-required` (browsers otherwise wait for a click).
 - To try the page in a browser, serve the project folder and open
   `/windows/preview/web/index.html?file=/path/to/song.gp`.

@@ -73,10 +73,10 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
 ## Preview in Explorer (optional)
 
 With Explorer's preview pane open (**View → Preview pane**, or Alt+P), selecting a `.gp` file shows its
-score and plays the recording with a cursor that follows along, without opening Guitar Pro. Pick a track
-at the top (it starts on a bass part, then remembers your pick); Space plays and pauses. It follows
-Explorer's light or dark theme and works for any Guitar Pro 7/8 file; files without a recording play
-through alphaTab's synthesizer. A preview doesn't change the file's *Date accessed*.
+score and starts playing the recording, with a cursor that follows along, without opening Guitar Pro.
+Pick a track at the top (it starts on a bass part, then remembers your pick); Space pauses and plays.
+It follows Windows' light or dark mode and works for any Guitar Pro 7/8 file; files without a recording
+play through alphaTab's synthesizer. A preview doesn't change the file's *Date accessed*.
 
 To install it, install the .NET SDK once (`winget install Microsoft.DotNet.SDK.10`), then double-click
 `windows\install-preview.cmd`. It builds the add-in and registers it; Windows asks for admin rights once.

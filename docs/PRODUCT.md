@@ -61,7 +61,7 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Keep the intro audio that plays before the chart's first beat | ✅ |
 | Mac `_m.psarc` files | ◐ supported, untested |
 | Capo charts | ◐ supported, untested |
-| Preview a `.gp` in Explorer's preview pane: score, recording, cursor following it (the user's request) | ◐ works through Explorer's preview host with real files, light and dark; not yet seen in Explorer by the user |
+| Preview a `.gp` in Explorer's preview pane: score, recording playing on its own, cursor following it (the user's request) | ✅ works in Explorer on the user's PC (confirmed by the user; autoplay and dark mode checked in a real Explorer window) |
 
 ### Later (not started; ordering is a suggestion)
 
@@ -135,8 +135,9 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     .NET Framework 4.8 and WebView2, both part of Windows 11, so nothing to install at run time; the page
     it shows uses alphaTab, so the score and the synced playback come from the same library that writes
     the files. Kept apart from the converter (own folder and installer), so the converter's rules still
-    hold. Its COM class is registered machine-wide (one admin prompt), because Explorer could not load a
-    new per-user registration until the user signed in again; the user chose this over signing out.
+    hold. Its COM class is registered machine-wide (one admin prompt). The user chose that over
+    signing out, on a diagnosis that turned out wrong (the registry writes were only visible inside
+    Claude's own session, see CLAUDE.md); a per-user install without admin rights would probably work.
 
 ## Observations from real use
 

@@ -54,10 +54,13 @@ namespace Psarc2gp.Preview
             UiThread.Run(() =>
             {
                 control?.Dispose();
-                var dark = AppsUseDarkTheme(); // in case Explorer doesn't pass its colours
+                // Explorer passes white and black even in dark mode, so Windows' app theme decides light or
+                // dark; Explorer's colours are used when they agree with it
+                var dark = AppsUseDarkTheme();
+                var agree = background.HasValue && foreground.HasValue && (background.Value.GetBrightness() < 0.5f) == dark;
                 control = new PreviewControl(
-                    background ?? (dark ? Color.FromArgb(0x20, 0x20, 0x20) : Color.White),
-                    foreground ?? (dark ? Color.White : Color.FromArgb(0x1b, 0x1b, 0x1b)));
+                    agree ? background.Value : dark ? Color.FromArgb(0x19, 0x19, 0x19) : Color.White, // #191919: Explorer's dark background
+                    agree ? foreground.Value : dark ? Color.White : Color.FromArgb(0x1b, 0x1b, 0x1b));
                 window = control.Handle;
                 Win32.SetParent(window, parent);
                 Place();

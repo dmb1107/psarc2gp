@@ -74,7 +74,9 @@ namespace Psarc2gp.Preview
             // WebView2Loader.dll is in this add-in's folder, not next to prevhost.exe
             if (!loaderFolderSet) CoreWebView2Environment.SetLoaderDllFolderPath(Path.Combine(Folders.Bin, "runtimes", "win-x64", "native"));
             loaderFolderSet = true;
-            return CoreWebView2Environment.CreateAsync(null, Path.Combine(Folders.Data, "WebView2"));
+            // the preview starts playing on its own, which a browser normally only allows after a click
+            var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+            return CoreWebView2Environment.CreateAsync(null, Path.Combine(Folders.Data, "WebView2"), options);
         }
 
         // A preview isn't an access: people sort their songs by Explorer's "Date accessed", which a plain
