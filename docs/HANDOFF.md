@@ -30,7 +30,7 @@ its audio and all sync points; every track renders in alphaTab without errors; t
 matches ToneLib's decode; Ogg output passes ffmpeg's strict CRC check and reports the exact sample count.
 The ToneLib differences that remain are deliberate or judgment calls (PRODUCT.md, decision 6).
 
-## Open issue: synth may lag the recording in Guitar Pro
+## Open issue: synth lags the recording in Guitar Pro (cause confirmed)
 
 The user hears the synth bass late against the recording in *Destroyed by Hippie Powers*, bar 56 (the
 `9 9` notes), with the recording turned down and the bass track up. Investigated:
@@ -47,9 +47,10 @@ The user hears the synth bass late against the recording in *Destroyed by Hippie
   track. Guitar Pro's docs mention a delay between RSE and MIDI and a MIDI latency setting
   (Preferences → Audio/MIDI).
 
-To confirm with the user: switch the bass track to an RSE sound in Guitar Pro's track inspector (or
-calibrate MIDI latency) and replay bar 56. If RSE fixes it, the converter should produce tracks that
-use RSE sounds by default. That needs testing in Guitar Pro 8, since alphaTab doesn't write RSE sound banks.
+**Confirmed by the user:** switching the bass track to an RSE sound in Guitar Pro's track inspector
+fixed the lag. The converter should therefore produce tracks that use RSE sounds by default (right
+instrument per track: bass, clean/overdriven guitar). That needs testing in Guitar Pro 8, since alphaTab
+writes MIDI-engine tracks and doesn't write RSE sound banks.
 A reference clip (recording plus a zero-latency synth at the chart's note times) was made for the
 user to rule out the chart by ear; rendering such clips would make a useful verification tool.
 
@@ -90,7 +91,7 @@ With samples present, `npm test` runs the integration tests on every song; witho
 
 In rough priority order; these are outcomes, not implementation plans.
 
-1. **Resolve the synth-lag issue above** (RSE vs MIDI engine), since sync is the product's core promise.
+1. **Make converted tracks use RSE sounds by default** (see the open issue above), since sync is the product's core promise.
 2. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
    files, and a folder; open the results in Guitar Pro 8; confirm sync, audio-track mute/solo, speed
    change, looping. Fix whatever breaks.
