@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guitar Pro preview</title>
+<link rel="stylesheet" href="preview.css">
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p id="byline"></p>
+</header>
+<section id="player" hidden>
+  <audio id="audio" controls preload="metadata"></audio>
+</section>
+<section id="tracks"></section>
+<p id="status">Loading…</p>
+<script src="/node_modules/@coderline/alphatab/dist/alphaTab.min.js"></script>
+<script src="preview.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+/* Colours come from Explorer (the add-in passes them as ?bg=&fg=); these are the fallbacks. */
+:root {
+  --bg: #ffffff;
+  --fg: #1b1b1b;
+  --muted: color-mix(in srgb, var(--fg) 60%, var(--bg));
+  --line: color-mix(in srgb, var(--fg) 15%, var(--bg));
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #202020; --fg: #f0f0f0; }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body {
+  font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  padding: 16px;
+  user-select: none;
+}
+h1 { font-size: 18px; font-weight: 600; margin: 0; }
+#byline { margin: 2px 0 0; color: var(--muted); }
+#player { margin: 14px 0; }
+#player audio { width: 100%; }
+#tracks { display: grid; gap: 2px; }
+.track { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.track span:last-child { color: var(--muted); white-space: nowrap; }
+#status { color: var(--muted); }
+#status:empty { display: none; }
