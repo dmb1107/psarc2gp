@@ -43,7 +43,12 @@ Windows 11 Pro (build 26200), Node.js 24.22.1 and Git 2.56 (installed with winge
 40/40 and `tools/verify.js` gives the numbers above.
 
 - `windows\install.cmd` installs the dependency and creates the two Send To shortcuts. They now start
-  `node.exe bin\psarc2gp.js --pause [--force]` directly and carry Guitar Pro's icon.
+  `node.exe bin\psarc2gp.js --pause [--force] [-o <folder>]` directly and carry Guitar Pro's icon.
+- The user's entries write every `.gp` to `<Google Drive folder>` (Google Drive for desktop),
+  installed with `install.cmd "<Google Drive folder>"`. Checked with a real drop (Destroyed by
+  Hippie Powers). Re-running `install.cmd` without the folder switches back to writing next to each
+  `.psarc`, so pass the folder again when reinstalling. Not tested: converting while Google Drive isn't
+  running (G: missing; it should fail with an error and leave the window open).
 - Real Explorer drops, made through the shell's `IDropTarget` on the installed shortcuts (what the
   Send To menu calls), with real charts: a folder of two songs, a single song, the same song again
   (skipped, `.gp` untouched), the overwrite entry (replaced), and a corrupt file (the window stays open

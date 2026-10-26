@@ -118,7 +118,8 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
    - each beat uses the grid with the lowest timing error plus a small readability cost
    - triplet beats use one note value per beat (complete tuplet groups)
    - charts that start late get count-in rest bars so the intro plays
-7. **Output naming and safety:** `Artist - Title.gp` next to the input; existing files are skipped
+7. **Output naming and safety:** `Artist - Title.gp` next to the input, or in one folder chosen at
+   install (the user's: `<Google Drive folder>`, on Google Drive); existing files are skipped
    unless the user picks the overwrite entry.
 8. **RSE sounds and muted instrument tracks by default** (the user's request after finding the synth
    late). Guitar Pro's MIDI output lags the audio track; RSE doesn't. Guitar sounds follow the chart's

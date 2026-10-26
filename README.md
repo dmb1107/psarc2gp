@@ -32,6 +32,11 @@ you press a key.
 `Artist - Title.gp` is written next to each `.psarc`. If that file already exists it is left alone, so
 edits you made in Guitar Pro are never overwritten; use **Guitar Pro (synced, overwrite)** to regenerate.
 
+To put every `.gp` into one folder instead (a Google Drive folder, say), install with that folder from a
+terminal: `C:\Tools\psarc2gp\windows\install.cmd "G:\My Drive\Guitar Pro"`. Running `install.cmd`
+without a folder goes back to writing next to each `.psarc`. In one folder, a second chart of the same
+song is skipped like any existing file.
+
 Command line (any OS):
 
 ```
