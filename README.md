@@ -123,6 +123,7 @@ node tools/inspect.js a.psarc  # what's inside
 node tools/tex.js a.psarc out.atex   # the generated alphaTex
 node tools/wem2ogg.js a.psarc out.ogg
 node tools/roundtrip.js out.gp # re-open a .gp and report tracks, bars, sync points, audio
+node tools/render-check.cjs out.gp --png shots/   # render every track in headless Chromium (needs Playwright)
 ```
 
 Charts are copyrighted, so none are in the repo. For the integration tests, put `.psarc` files (and

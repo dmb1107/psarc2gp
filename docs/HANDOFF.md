@@ -88,9 +88,11 @@ With samples present, `npm test` runs the integration tests on every song; witho
    still about 1 ms.
 3. `node tools/compare-tonelib.js X.psarc X.song` for songs with `.song` files: investigate any drop in
    onset agreement. Differences can be fine if they make the notation better; say why.
-4. For anything visible (notation, layout), **look at it**. Render the `.gp` (e.g. alphaTab in a
-   headless browser) or have the user open it in Guitar Pro. Several real problems this session were
-   only visible that way (wrong clef/octave, tempo-mark clutter, a renderer crash on mixed tuplets).
+4. For anything visible (notation, layout), **look at it**. `node tools/render-check.cjs out/*.gp --png
+   shots/` renders every track with alphaTab in headless Chromium and saves page images (Playwright is
+   not a project dependency; the tool says how to install it), or have the user open it in Guitar Pro.
+   Several real problems this session were only visible that way (wrong clef/octave, tempo-mark
+   clutter, a renderer crash on mixed tuplets).
 5. Re-convert the samples and re-open them (`tools/roundtrip.js`).
 
 ## Suggested next steps

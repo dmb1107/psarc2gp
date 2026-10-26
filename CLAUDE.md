@@ -18,6 +18,7 @@ node bin/psarc2gp.js [-f] [-o dir] <file.psarc | folder> ...
 node tools/verify.js .samples/*.psarc      # bars complete, notes present, onset error vs chart
 node tools/compare-tonelib.js X.psarc X.song
 node tools/roundtrip.js out/*.gp           # re-open .gp files and report what Guitar Pro will see
+node tools/render-check.cjs out/*.gp [--png dir]   # render every track in headless Chromium (needs Playwright)
 node tools/inspect.js | tex.js | wem2ogg.js   # look inside a .psarc / dump alphaTex / extract audio
 ```
 
