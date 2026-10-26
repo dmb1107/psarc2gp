@@ -99,6 +99,9 @@ untested.
 
 ## Development
 
+Project background, requirements and decisions: [docs/PRODUCT.md](docs/PRODUCT.md). Current state,
+verification and next steps: [docs/HANDOFF.md](docs/HANDOFF.md).
+
 ```
 npm install
 npm test                       # unit tests; plus integration tests if ./.samples has .psarc files
