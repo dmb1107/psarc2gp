@@ -21,6 +21,7 @@ node tools/compare-tonelib.js X.psarc X.song
 node tools/roundtrip.js out/*.gp           # re-open .gp files and report what Guitar Pro will see
 node tools/render-check.cjs out/*.gp [--png dir]   # render every track in headless Chromium (needs Playwright)
 node tools/inspect.js | tex.js | wem2ogg.js   # look inside a .psarc / dump alphaTex / extract audio
+windows\install-preview.cmd                # build + register the Explorer preview (.NET SDK; admin prompt)
 ```
 
 ## Layout
@@ -35,6 +36,8 @@ src/notation/       timeline (bars, meters, count-in, sync points), arrangement 
 src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
 windows/            Send To installer (CRLF line endings, see .gitattributes; keep the .ps1 ASCII-only,
                     Windows PowerShell 5.1 reads BOM-less files as ANSI)
+windows/preview/    Explorer preview pane add-in: C# (.NET Framework 4.8) hosting WebView2, which shows
+                    web/index.html; the page reads the .gp and plays it with alphaTab from node_modules
 tools/              verification and debugging helpers; tools/tonelib.js reads ToneLib .song as a test oracle
 test/               node:test; samples.test.js uses real charts from .samples/
 ```
@@ -45,8 +48,9 @@ test/               node:test; samples.test.js uses real charts from .samples/
   convenience. Measure with `tools/verify.js`.
 - **Never overwrite** an existing `.gp` by default; users edit those files in Guitar Pro.
 - **No copyrighted material in git**: charts, audio, converted `.gp` files. Samples live in `.samples/`.
-- One runtime (Node ≥ 20), one pinned dependency (alphaTab), no native tools. This keeps installation
-  trivial and a future browser version possible.
+- The converter: one runtime (Node ≥ 20), one pinned dependency (alphaTab), no native tools. This keeps
+  installation trivial and a future browser version possible. The optional Explorer preview
+  (windows/preview) is the one native part (the user's decision): keep it separate from the converter.
 - Notation should give the best practice experience, not mimic ToneLib; when you deviate from ToneLib,
   record why (README "Notation choices").
 - Visual changes need a visual check (render the `.gp`, or ask the user to open it in Guitar Pro).
@@ -85,3 +89,20 @@ test/               node:test; samples.test.js uses real charts from .samples/
   can come first in the archive.
 - Some charts aren't on their own beat grid (notes 15–30 ms off the nearest 16th). verify.js then
   reports p95 onset errors of 10–30 ms; that's the chart, not a regression (see HANDOFF.md).
+
+Explorer preview (windows/preview):
+- Explorer creates preview handlers out of process (prevhost.exe) through COM, and COM ignores a *new*
+  per-user (HKCU) out-of-process class until the user signs in again. So the class is in HKLM (the
+  installer elevates itself for that part); the .gp association stays in HKCU.
+- prevhost calls .NET objects on RPC threads (MTA). WinForms and WebView2 need an STA with a message
+  loop: everything window-related runs on `UiThread`.
+- WebView2 can't start at low integrity: the class sets `DisableLowILProcessIsolation`. Its loader DLL is
+  in bin\runtimes\win-x64\native (`SetLoaderDllFolderPath`); prevhost's folder is System32, so assemblies
+  next to ours are resolved by hand.
+- prevhost keeps the DLL loaded: stop prevhost.exe before rebuilding (the installer does).
+- The add-in reads the .gp itself, without updating its Date accessed (the user sorts songs by it), and
+  serves it to the page from memory; the page and alphaTab come from the project folder via a virtual host.
+- alphaTab 1.8.4: subscribing to `api.midiLoaded` recurses forever when the synthesizer plays (files
+  without a recording). Don't use it.
+- To try the page in a browser, serve the project folder and open
+  `/windows/preview/web/index.html?file=/path/to/song.gp`.

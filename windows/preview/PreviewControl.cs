@@ -50,11 +50,13 @@ namespace Psarc2gp.Preview
                 core.Settings.AreDevToolsEnabled = Environment.GetEnvironmentVariable("PSARC2GP_PREVIEW_DEVTOOLS") == "1";
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
+                core.Settings.AreBrowserAcceleratorKeysEnabled = false; // no F5 reload, Ctrl+F, Ctrl+P in a preview
                 core.SetVirtualHostNameToFolderMapping(AppHost, Folders.Project, CoreWebView2HostResourceAccessKind.Allow);
                 core.AddWebResourceRequestedFilter($"https://{FileHost}/*", CoreWebView2WebResourceContext.All);
                 core.WebResourceRequested += (s, e) => e.Response = env.CreateWebResourceResponse(
                     new MemoryStream(gp), 200, "OK", $"Content-Type: application/octet-stream\nAccess-Control-Allow-Origin: https://{AppHost}");
                 core.NewWindowRequested += (s, e) => e.Handled = true;
+                core.NavigationStarting += (s, e) => e.Cancel = !e.Uri.StartsWith($"https://{AppHost}/", StringComparison.OrdinalIgnoreCase);
                 core.Navigate($"https://{AppHost}/windows/preview/web/index.html?bg={Hex(background)}&fg={Hex(foreground)}");
             }
             catch (Exception ex)

@@ -11,10 +11,16 @@
   <h1 id="title"></h1>
   <p id="byline"></p>
 </header>
-<section id="player" hidden>
-  <audio id="audio" controls preload="metadata"></audio>
-</section>
-<section id="tracks"></section>
+<div id="controls">
+  <button id="play" type="button" aria-label="Play" title="Play (Space)" disabled>
+    <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+    <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+  </button>
+  <span id="time">0:00 / 0:00</span>
+  <input id="seek" type="range" min="0" max="0" value="0" step="100" aria-label="Position" disabled>
+</div>
+<nav id="tracks" aria-label="Tracks"><span id="tuning"></span></nav>
+<main id="viewport"><div id="score"></div></main>
 <p id="status">Loading…</p>
 <script src="/node_modules/@coderline/alphatab/dist/alphaTab.min.js"></script>
 <script src="preview.js"></script>

@@ -54,7 +54,10 @@ namespace Psarc2gp.Preview
             UiThread.Run(() =>
             {
                 control?.Dispose();
-                control = new PreviewControl(background ?? SystemColors.Window, foreground ?? SystemColors.WindowText);
+                var dark = AppsUseDarkTheme(); // in case Explorer doesn't pass its colours
+                control = new PreviewControl(
+                    background ?? (dark ? Color.FromArgb(0x20, 0x20, 0x20) : Color.White),
+                    foreground ?? (dark ? Color.White : Color.FromArgb(0x1b, 0x1b, 0x1b)));
                 window = control.Handle;
                 Win32.SetParent(window, parent);
                 Place();
@@ -93,6 +96,12 @@ namespace Psarc2gp.Preview
         public void GetWindow(out IntPtr phwnd) => phwnd = window != IntPtr.Zero ? window : parent;
 
         public void ContextSensitiveHelp(bool fEnterMode) => throw new NotImplementedException();
+
+        static bool AppsUseDarkTheme()
+        {
+            using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                return key?.GetValue("AppsUseLightTheme") is int light && light == 0;
+        }
 
         void Place()
         {

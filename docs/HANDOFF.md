@@ -18,6 +18,8 @@ History (see `git log`):
 4. RSE sounds and muted instrument tracks by default (fixes the synth lagging the recording)
 5. Windows: Send To entries start node.exe directly; song names no longer lost when the vocals manifest
    comes first; `tools/sweep.js` (branch `windows-sendto-node`)
+6. Send To output folder option (the user's entries write to `<Google Drive folder>`)
+7. Explorer preview pane add-in for `.gp` files (branch `windows-preview-handler`)
 
 ## Evidence
 
@@ -71,6 +73,30 @@ Windows 11 Pro (build 26200), Node.js 24.22.1 and Git 2.56 (installed with winge
 - Not verified: the right-click menu itself, clicked by hand (the drop handler behind it was); and
   double-clicking `install.cmd` from a zip that Explorer extracted (the files then carry the internet
   zone mark, so Windows may ask before running it).
+
+## Explorer preview (2026-10-25)
+
+`windows/preview`: selecting a `.gp` with Explorer's preview pane open shows the score of one track
+(alphaTab, notation + tab), plays the embedded recording with alphaTab's backing-track player and the
+cursor following the sync points, with track tabs (a bass part first, then the last pick, remembered
+in WebView2's storage) and a seek bar. Installed on the user's PC (.NET SDK 10.0.403 for building).
+
+Checked with a test host that does what Explorer does: out-of-process creation in prevhost.exe,
+IInitializeWithFile, colours, SetWindow/DoPreview into a window, then screenshots and clicks:
+- Destroyed by Hippie Powers: renders in about 2.5 s from a cold start; plays (cursor at bar 6 at
+  0:12, matching the chart's tempo); switching to Lead mid-song keeps playing; light and dark colours;
+  a 400 px wide pane; the same file straight from Google Drive.
+- A Guitar Pro file not made by psarc2gp and without a recording (J. Cole – The Let Out): five tracks,
+  plays through the synthesizer, after working around an alphaTab 1.8.4 bug (`midiLoaded` recursion,
+  see CLAUDE.md).
+- Date accessed on NTFS is unchanged by a preview, while a plain read changes it. Once, the first
+  preview of a file from Downloads (internet zone mark) did change it and a repeat didn't; most likely
+  Defender scanning the file the first time it was opened.
+
+Not verified: the preview in Explorer itself, clicked by the user; keyboard shortcuts typed while the
+preview has focus (Explorer's own, like F5, aren't forwarded to Explorer, and the browser's are off);
+Explorer passing its own colours in dark mode (if it doesn't, the add-in follows Windows' app theme,
+which is what the user's dark mode was tested with).
 
 ## Library sweep (2026-10-25)
 
@@ -170,7 +196,8 @@ In rough priority order; these are outcomes, not implementation plans.
 
 1. **Finish proving the Windows experience in Guitar Pro 8** (the user): right-click → Send to on a few
    songs, open the results, confirm sync, RSE sounds, muted instrument tracks, audio-track mute/solo,
-   speed change, looping, and the low B of Them Changes. Fix whatever breaks.
+   speed change, looping, and the low B of Them Changes. Also try the Explorer preview. Fix whatever
+   breaks.
 2. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
    taste (e.g. chord lengths when the chart gives none, grace notes, triplets).
 3. **Loosely charted songs** (15 % of the user's library, see "Library sweep"): decide how to write

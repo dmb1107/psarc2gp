@@ -70,6 +70,18 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
 - The cursor may look a little ahead of the sound. That is the audio output latency of your sound
   device, not the file; the synth and the recording stay together.
 
+## Preview in Explorer (optional)
+
+With Explorer's preview pane open (**View → Preview pane**, or Alt+P), selecting a `.gp` file shows its
+score and plays the recording with a cursor that follows along, without opening Guitar Pro. Pick a track
+at the top (it starts on a bass part, then remembers your pick); Space plays and pauses. It follows
+Explorer's light or dark theme and works for any Guitar Pro 7/8 file; files without a recording play
+through alphaTab's synthesizer. A preview doesn't change the file's *Date accessed*.
+
+To install it, install the .NET SDK once (`winget install Microsoft.DotNet.SDK.10`), then double-click
+`windows\install-preview.cmd`. It builds the add-in and registers it; Windows asks for admin rights once.
+`windows\uninstall-preview.cmd` removes it. If you move the psarc2gp folder, run the installer again.
+
 ## How it works
 
 ```
@@ -149,6 +161,7 @@ src/audio/               Wwise → Ogg (ww2ogg port), Ogg page writer, packed co
 src/notation/            timeline (bars, meters, sync), arrangement (quantizing, techniques), score
 src/gp/                  RSE sounds patched into the .gp, minimal zip rewrite
 windows/                 Send To installer (the entries start node.exe directly)
+windows/preview/         Explorer preview pane add-in (C#, WebView2) and the page it shows (web/)
 tools/                   verification and debugging helpers
 ```
 
@@ -158,5 +171,7 @@ tools/                   verification and debugging helpers
   `packed_codebooks_aoTuV_603.bin` comes from it. See `src/audio/LICENSE-ww2ogg.txt`.
 - [alphaTab](https://github.com/CoderLine/alphaTab) (MPL-2.0) builds and writes the Guitar Pro file.
 - The archive keys are the public Rocksmith 2014 keys used by the community CDLC tools.
+- The Explorer preview uses Microsoft Edge WebView2 (its SDK is restored from NuGet when the add-in is
+  built) and shows the score with alphaTab.
 
 Convert only custom songs you have the right to use.
