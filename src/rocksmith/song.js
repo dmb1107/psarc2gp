@@ -37,6 +37,11 @@ export function loadSong(psarcBuffer) {
       tuning: sng.meta.tuning,
       centOffset: attrs.CentOffset ?? 0,
       capo: Math.max(0, sng.meta.capo),
+      // amp tones, used to pick a fitting Guitar Pro sound (clean / overdrive / distortion / acoustic)
+      tones: {
+        base: attrs.Tone_Base ?? null,
+        list: (attrs.Tones ?? []).map((t) => ({ name: t.Name, key: t.Key, descriptors: t.ToneDescriptors ?? [] })),
+      },
       sng,
       notes: maxDifficultyNotes(sng),
     });

@@ -49,6 +49,12 @@ test("sample songs", { skip: files.length ? false : "no samples (see test/sample
         const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(gp), new alphaTab.Settings());
         assert.ok(score.backingTrack?.rawAudioFile?.length > 100000);
         assert.equal(score.masterBars.flatMap((m) => m.syncPoints ?? []).length, report.syncPoints);
+        // instrument tracks: muted, on Guitar Pro's RSE engine (MIDI output lags the audio track)
+        assert.ok(score.tracks.every((t) => t.playbackInfo.isMute));
+        const { readZip, entryData } = await import("../src/gp/zip.js");
+        const gpif = entryData(readZip(gp).find((e) => e.name === "Content/score.gpif")).toString();
+        assert.equal(gpif.match(/<AudioEngineState>RSE<\/AudioEngineState>/g)?.length, score.tracks.length);
+        assert.ok(!gpif.includes("<AudioEngineState>MIDI"));
       });
 
       const songFile = file.replace(/\.psarc$/, ".song");

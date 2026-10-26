@@ -30,6 +30,7 @@ src/rocksmith/      PSARC archive, SNG arrangement parser, song loader
 src/audio/          Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks (BSD, keep the license file)
 src/notation/       timeline (bars, meters, count-in, sync points), arrangement (grid choice, durations,
                     techniques), score (assembles alphaTex)
+src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
 windows/            Send To installer and wrappers (CRLF line endings, see .gitattributes)
 tools/              verification and debugging helpers; tools/tonelib.js reads ToneLib .song as a test oracle
 test/               node:test; samples.test.js uses real charts from .samples/
@@ -64,6 +65,11 @@ test/               node:test; samples.test.js uses real charts from .samples/
   convention. Bass tracks also need `\clef bass`.
 - alphaTab treats a tuplet group as complete only with equal-length values (or a power-of-two total);
   mixed triplet values crashed its renderer, hence one value per triplet beat.
+- alphaTab writes every track for Guitar Pro's **MIDI** engine. In Guitar Pro that plays through the system
+  MIDI synth and lags the audio track; **RSE** (Guitar Pro's sampled engine) stays in time with it (the user
+  confirmed by ear). So `src/gp/rse.js` rewrites each track's sound in `score.gpif` after export, using sound
+  definitions copied from Guitar Pro 8 files. It throws if alphaTab's XML changes shape; re-check it when
+  upgrading alphaTab. Instrument tracks are written muted (`playbackInfo.isMute`); the audio track is not.
 - Bar-length checks must sum `beat.displayDuration` (grace notes count 0); `playbackDuration` lends
   time to grace notes from neighbouring beats.
 - ToneLib re-bars count-ins, so its bar numbers are offset from ours by a constant; the comparison

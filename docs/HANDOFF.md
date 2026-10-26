@@ -13,6 +13,7 @@ History (see `git log`):
 1. PSARC/SNG reader and Wwise → Ogg converter (ww2ogg port)
 2. Notation converter, `.gp` output with per-beat sync, CLI, Windows Send To, tests
 3. Notation fixes from comparisons against ToneLib on four charts
+4. RSE sounds and muted instrument tracks by default (fixes the synth lagging the recording)
 
 ## Evidence
 
@@ -30,10 +31,10 @@ its audio and all sync points; every track renders in alphaTab without errors; t
 matches ToneLib's decode; Ogg output passes ffmpeg's strict CRC check and reports the exact sample count.
 The ToneLib differences that remain are deliberate or judgment calls (PRODUCT.md, decision 6).
 
-## Open issue: synth lags the recording in Guitar Pro (cause confirmed)
+## Resolved: synth lagged the recording in Guitar Pro
 
-The user hears the synth bass late against the recording in *Destroyed by Hippie Powers*, bar 56 (the
-`9 9` notes), with the recording turned down and the bass track up. Investigated:
+The user heard the synth bass late against the recording in *Destroyed by Hippie Powers*, bar 56 (the
+`9 9` notes). Investigated and fixed:
 
 - **Chart vs recording:** fine. Measured from the bass's own pitch (energy at the note's harmonics),
   the recorded F♯ notes in bars 56–57 start within −15…+17 ms of the chart times. Across the song the
@@ -41,16 +42,20 @@ The user hears the synth bass late against the recording in *Destroyed by Hippie
   measurement is noisy).
 - **Converter vs chart:** fine. Notes in bar 56 are written exactly on their 8th-note positions, and
   the sync points carry the exact beat times (frame offsets) and matching tempos.
-- **Likely cause:** alphaTab writes every track with `<AudioEngineState>MIDI</AudioEngineState>`, so
-  Guitar Pro plays the synth through its **MIDI output** (on Windows usually the Microsoft GS Wavetable
-  Synth, which adds its own latency) instead of its built-in RSE engine, which runs alongside the audio
-  track. Guitar Pro's docs mention a delay between RSE and MIDI and a MIDI latency setting
-  (Preferences → Audio/MIDI).
+- **Cause:** alphaTab writes every track with `<AudioEngineState>MIDI</AudioEngineState>`, so Guitar Pro
+  played the synth through the system **MIDI output** (on Windows usually the Microsoft GS Wavetable
+  Synth, which adds its own latency) instead of its built-in **RSE** engine, which renders alongside the
+  audio track. The user switched the track to an RSE sound and the lag was gone; switching back to MIDI
+  brought it back.
+- **Fix:** converted tracks now get RSE sounds (`src/gp/rse.js`: bass → "Electric Bass (finger)",
+  guitars → clean / overdriven / distortion / acoustic from the chart's Rocksmith tone descriptors) and
+  start muted, so the recording plays alone until the user unmutes a part. The sound definitions are
+  copied from Guitar Pro 8.1 files and the patched track XML has the same elements, in the same order, as
+  Guitar Pro writes. `--midi` and `--no-mute` restore the old behaviour.
+- **Still to confirm in Guitar Pro 8:** that a freshly converted file opens with RSE sounds on every
+  track, plays them in time, and shows the instrument tracks muted. Also whether the RSE bass covers the
+  low B of 5/6-string bass parts (*Them Changes*).
 
-**Confirmed by the user:** switching the bass track to an RSE sound in Guitar Pro's track inspector
-fixed the lag. The converter should therefore produce tracks that use RSE sounds by default (right
-instrument per track: bass, clean/overdriven guitar). That needs testing in Guitar Pro 8, since alphaTab
-writes MIDI-engine tracks and doesn't write RSE sound banks.
 A reference clip (recording plus a zero-latency synth at the chart's note times) was made for the
 user to rule out the chart by ear; rendering such clips would make a useful verification tool.
 
@@ -58,8 +63,9 @@ user to rule out the chart by ear; rendering such clips would make a useful veri
 
 - **Windows install and Send To.** `windows/*.cmd` and `install-sendto.ps1` were written without a
   Windows machine. This is the user's primary way of using the tool, so it's the first thing to check.
-- **Guitar Pro 8 with the latest files.** Only the first test file (an earlier build) was opened in
-  GP8 by the user. The six converted songs were checked by re-opening them with alphaTab, not GP8.
+- **Guitar Pro 8 with the latest files.** The user opened earlier builds in GP8; the current output
+  (RSE sounds, muted tracks) has only been checked by re-opening with alphaTab and comparing the XML with
+  Guitar Pro's own files.
 - Mac `_m.psarc` files, capo charts, and slap/pop, tremolo picking, pinch harmonics in a real chart
   (none of the samples use them).
 - Notation of *No More Lies* and *Them Changes* against ToneLib (the user may send the `.song` files).
@@ -91,17 +97,16 @@ With samples present, `npm test` runs the integration tests on every song; witho
 
 In rough priority order; these are outcomes, not implementation plans.
 
-1. **Make converted tracks use RSE sounds by default** (see the open issue above), since sync is the product's core promise.
-2. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
-   files, and a folder; open the results in Guitar Pro 8; confirm sync, audio-track mute/solo, speed
-   change, looping. Fix whatever breaks.
-3. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
+1. **Prove the Windows experience**: install from a fresh copy on Windows, Send To on one file, several
+   files, and a folder; open the results in Guitar Pro 8; confirm sync, RSE sounds, muted instrument
+   tracks, audio-track mute/solo, speed change, looping. Fix whatever breaks.
+2. **Review notation with the user** in Guitar Pro on a few songs and tune the notation choices to their
    taste (e.g. chord lengths when the chart gives none, grace notes, triplets).
-4. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
+3. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
-5. **Lyrics / vocal melody track.**
-6. Remaining techniques: strum direction, let-ring, fingering.
-7. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
+4. **Lyrics / vocal melody track.**
+5. Remaining techniques: strum direction, let-ring, fingering.
+6. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
 
 ## Known quirks
 
@@ -124,6 +129,8 @@ In rough priority order; these are outcomes, not implementation plans.
 - **Beat grid / ebeats**: one timestamp per beat, with downbeats marked. This is what the sync points are
   built from.
 - **Sync point**: Guitar Pro's link between a position in the score and a time in the audio track.
+- **RSE**: Guitar Pro's Realistic Sound Engine, its built-in sampled instruments. Plays in time with the
+  audio track; a track set to MIDI plays through the system synth and lags.
 - **ToneLib Jam / `.song`**: the user's previous player; its `.song` export is a zip with a score XML
   and Ogg audio, used here only as a reference.
 - **alphaTab / alphaTex**: the open-source notation library that writes the `.gp` file, and its text

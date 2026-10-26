@@ -1,10 +1,9 @@
 // Assemble an alphaTex document (all tracks, bar metadata, sync points) from a loaded song.
 import { buildTimeline, measureAt, syncPoints } from "./timeline.js";
 import { convertArrangement, pitchName } from "./arrangement.js";
+import { SOUNDS, chooseSound } from "../gp/rse.js";
 
 const q = (s) => `"${String(s ?? "").replace(/["\\]/g, "'")}"`;
-const PROGRAM_BASS = 33; // Electric Bass (finger)
-const PROGRAM_GUITAR = 27; // Electric Guitar (clean)
 
 const titleCase = (s) => s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -41,10 +40,13 @@ export function buildAlphaTex(song, { warn = () => {} } = {}) {
     const n = song.arrangements.filter((a) => a.name === arr.name).length;
     const name = `${arr.name}${n > 1 && nameCount[arr.name] > 1 ? ` ${nameCount[arr.name]}` : ""}${arr.bonus ? " (bonus)" : ""}`;
     const bassSound = arr.isBass || conv.isBassRange;
+    // the MIDI program matches the RSE sound convert.js puts on the track, so Guitar Pro's instrument
+    // type and icon agree with it (and MIDI-engine output gets the same kind of instrument)
+    const sound = chooseSound(arr, { bass: bassSound });
     lines.push(`\\track ${q(name)}`);
     lines.push("\\staff {score tabs}");
     lines.push(`\\tuning (${conv.tuning.slice(0, conv.nStrings).reverse().map(pitchName).join(" ")})`);
-    lines.push(`\\instrument ${bassSound ? PROGRAM_BASS : PROGRAM_GUITAR}`);
+    lines.push(`\\instrument ${SOUNDS[sound].program}`);
     // guitar and bass are written an octave above sounding pitch (as Guitar Pro does)
     lines.push("\\displaytranspose 12");
     if (arr.capo > 0) lines.push(`\\capo ${arr.capo}`);
@@ -72,7 +74,7 @@ export function buildAlphaTex(song, { warn = () => {} } = {}) {
       return meta.length ? `${meta.join(" ")} ${body}` : body;
     });
     lines.push(bars.join(" |\n"));
-    trackReports.push({ name, ...conv.stats, tuning: conv.tuning.slice(0, conv.nStrings).map(pitchName).join(" ") });
+    trackReports.push({ name, ...conv.stats, tuning: conv.tuning.slice(0, conv.nStrings).map(pitchName).join(" "), sound });
   });
 
   const sync = syncPoints(measures);

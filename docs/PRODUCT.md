@@ -44,6 +44,8 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Open a Rocksmith 2014 `.psarc` directly, no other tools needed (no ToneLib, no Rocksmith toolkit) | ✅ |
 | Embed the full-song recording as the Guitar Pro audio track | ✅ |
 | Least possible drift between score and recording: a sync point on every chart beat | ✅ |
+| Synth instruments play in time with the recording (Guitar Pro RSE sounds, not MIDI) | ◐ written as RSE; the user confirmed RSE fixes the lag, the new files not yet opened in GP8 |
+| Open with only the recording audible; instrument tracks muted until the user unmutes one | ◐ same |
 | Notation + tab for every arrangement, readable and editable in Guitar Pro 8 | ✅ (one file confirmed in GP8 by the user; the rest checked by re-opening and rendering) |
 | Right-click "Send to" conversion on Windows, single files, multiple files, or folders | ◐ scripts written, not yet run on Windows |
 | Never overwrite a `.gp` the user may have edited, unless they ask (separate "overwrite" entry) | ✅ |
@@ -115,6 +117,9 @@ Any change should keep these, and `tools/verify.js` / `npm test` measure them.
    - charts that start late get count-in rest bars so the intro plays
 7. **Output naming and safety:** `Artist - Title.gp` next to the input; existing files are skipped
    unless the user picks the overwrite entry.
+8. **RSE sounds and muted instrument tracks by default** (the user's request after finding the synth
+   late). Guitar Pro's MIDI output lags the audio track; RSE doesn't. Guitar sounds follow the chart's
+   Rocksmith tones; bass parts (including a bass charted in a guitar slot) get the finger bass.
 
 ## Observations from real use
 
@@ -124,10 +129,10 @@ Any change should keep these, and `tools/verify.js` / `npm test` measure them.
   cursor. **Decided not to compensate in the file**: shifting sync points would put the synth out of
   time with the recording and be wrong on other machines.
 - Guitar Pro desktop has no dark score page (confirmed by Arobas support). The user will revisit this.
-- With the recording turned down and the synth bass up, the user hears some synth notes late (Destroyed
+- With the recording turned down and the synth bass up, the user heard some synth notes late (Destroyed
   by Hippie Powers, bar 56). The chart and the file were checked and are aligned. Cause confirmed: the
-  tracks use Guitar Pro's MIDI output; switching the track to RSE fixed it. Converted files should use
-  RSE sounds by default (HANDOFF.md, "Open issue").
+  tracks used Guitar Pro's MIDI output; switching the track to RSE fixed it, and MIDI was late again.
+  Converted files now use RSE sounds and start with the instrument tracks muted (decision 8).
 
 ## Open questions for the user
 

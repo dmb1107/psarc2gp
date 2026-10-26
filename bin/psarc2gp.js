@@ -13,18 +13,22 @@ options:
   -o, --out <dir>   write .gp files into this folder
   -r, --recursive   also look in subfolders
       --no-audio    don't embed the recording
+      --no-mute     leave the instrument tracks unmuted (default: muted, only the recording plays)
+      --midi        General MIDI sounds instead of Guitar Pro's RSE sounds (MIDI lags the recording)
       --atex        also write the intermediate alphaTex (.atex) for debugging
   -q, --quiet       only print errors
   -h, --help`;
 
 function parseArgs(argv) {
-  const opts = { force: false, out: null, recursive: false, audio: true, atex: false, quiet: false, inputs: [] };
+  const opts = { force: false, out: null, recursive: false, audio: true, mute: true, rse: true, atex: false, quiet: false, inputs: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-f" || a === "--force") opts.force = true;
     else if (a === "-o" || a === "--out") opts.out = argv[++i];
     else if (a === "-r" || a === "--recursive") opts.recursive = true;
     else if (a === "--no-audio") opts.audio = false;
+    else if (a === "--no-mute") opts.mute = false;
+    else if (a === "--midi") opts.rse = false;
     else if (a === "--atex") opts.atex = true;
     else if (a === "-q" || a === "--quiet") opts.quiet = true;
     else if (a === "-h" || a === "--help") { console.log(HELP); process.exit(0); }
@@ -73,7 +77,7 @@ for (const file of collect(opts.inputs, opts.recursive)) {
       skipped++;
       continue;
     }
-    const result = convertPsarc(buf, { withAudio: opts.audio, song });
+    const result = convertPsarc(buf, { withAudio: opts.audio, mute: opts.mute, rse: opts.rse, song });
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(outPath, result.gp);
     if (opts.atex) fs.writeFileSync(outPath.replace(/\.gp$/, ".atex"), result.tex);
@@ -88,7 +92,7 @@ for (const file of collect(opts.inputs, opts.recursive)) {
         t.graceNotes && `${t.graceNotes} grace notes`,
         t.droppedDuplicates && `${t.droppedDuplicates} duplicate notes dropped`,
       ].filter(Boolean);
-      log(`    ${t.name}: ${t.notes} notes, tuning ${t.tuning}${extras.length ? `; ${extras.join(", ")}` : ""}`);
+      log(`    ${t.name}: ${t.notes} notes, tuning ${t.tuning}, ${t.soundName}${r.muted ? " (muted)" : ""}${extras.length ? `; ${extras.join(", ")}` : ""}`);
     }
     for (const w of r.warnings) log(`    warning: ${w}`);
     converted++;

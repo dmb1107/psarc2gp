@@ -8,6 +8,8 @@ synthesized instrument without drifting.
 - Notation (standard + tab) for every arrangement in the file: lead, rhythm, bass, alternates, bonus parts
 - Audio decoded from Rocksmith's Wwise format to Ogg Vorbis (built-in port of ww2ogg, no extra tools)
 - Every Rocksmith beat is pinned to its exact time in the recording; nothing to line up by hand
+- Instrument tracks use Guitar Pro's own RSE sounds (bass, clean/overdriven/distorted/acoustic guitar), which
+  play in time with the recording, and start muted so you hear just the song until you unmute a part
 - Runs offline in about 1–3 seconds per song
 
 ## Install (Windows)
@@ -34,6 +36,8 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
   -o, --out <dir>   write .gp files into this folder
   -r, --recursive   also look in subfolders
       --no-audio    don't embed the recording
+      --no-mute     leave the instrument tracks unmuted
+      --midi        General MIDI sounds instead of RSE (these lag the recording in Guitar Pro)
       --atex        also write the intermediate alphaTex (.atex) for debugging
   -q, --quiet       only print errors
 ```
@@ -41,7 +45,14 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
 ## In Guitar Pro
 
 - The recording is the **Audio Track**; it has its own volume, mute and solo next to the instrument
-  tracks. Mute it and unmute the bass (or any) track to hear the synth instead, or play both.
+  tracks. The instrument tracks start **muted**: unmute the bass (or any) track to hear its synth along with
+  the recording, or mute the recording to hear the synth alone.
+- Instrument tracks use **RSE** sounds (Guitar Pro's Realistic Sound Engine, its built-in sampled
+  instruments). RSE plays inside Guitar Pro's audio engine together with the audio track, so the two stay
+  in time. Tracks set to MIDI play through your computer's MIDI synth instead (on Windows usually the
+  Microsoft GS Wavetable Synth), which adds its own delay and sounds late against the recording. If you
+  change a track's sound, pick an RSE one. Guitar sounds are chosen from the chart's Rocksmith tones
+  (clean, overdrive, distortion, acoustic).
 - Slow down with **relative speed (%)**, not a fixed tempo; Guitar Pro disables the audio track in
   fixed-tempo mode.
 - The audio always plays straight through, so don't fold sections into repeat signs.
@@ -92,6 +103,7 @@ loosely charted runs. Against ToneLib's notation of the same charts, 96–100 % 
 | tunings incl. drop/E♭ and extended-range charts (cent offset −1200) | real tuning (e.g. B-E-A-D, 6-string bass) |
 | sections, time signatures (incl. odd meters), tempo | sections, time signatures, tempo marks |
 | intro audio before the first charted beat | rest bars at the start |
+| amp tones (clean / overdrive / distortion / acoustic) | RSE instrument sound per track |
 
 Not converted (yet): lyrics/vocals, fingering, strum direction, let-ring, tone changes. Capo charts
 convert but haven't been checked against a real capo chart. Mac (`_m.psarc`) files are supported but
@@ -122,6 +134,7 @@ src/convert.js           psarc → .gp
 src/rocksmith/           PSARC archive, SNG arrangements, song loader
 src/audio/               Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks
 src/notation/            timeline (bars, meters, sync), arrangement (quantizing, techniques), score
+src/gp/                  RSE sounds patched into the .gp, minimal zip rewrite
 windows/                 Send To installer and wrappers
 tools/                   verification and debugging helpers
 ```
