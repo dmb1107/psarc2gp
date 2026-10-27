@@ -26,6 +26,7 @@ node tools/inspect.js | tex.js | wem2ogg.js   # look inside a .psarc / dump alph
 windows\install-preview.cmd                # build + register the Explorer preview (.NET SDK; admin prompt)
 npm run web                                # serve the project at http://localhost:8765/ (web app: /web/)
 npm run build:web                          # static site in dist/site (alphaTab paths rewritten to vendor/)
+node tools/screenshots.js .samples/*.psarc # retake docs/images (README) in headless Chrome over CDP
 ```
 
 ## Layout
@@ -113,6 +114,13 @@ Web app and browser port:
   `convertPsarc` and `rewriteZipEntry` return promises; `loadSong` and `wemToOgg` stay synchronous.
 - Importing alphaTab.mjs inside a worker turns that worker into an alphaTab render/synth worker (its
   listener then throws on our messages). src/convert.js and web/convert-worker.js import alphaTab.core.mjs.
+- Chrome delivers a module worker's messages while its top level is still in a top-level await, before
+  `onmessage` is set: they are lost. ww2ogg.js awaits its codebooks, so convert-worker.js imports the
+  converter dynamically and sets `onmessage` first (a song added right after the page opened hung at
+  "Converting…"; 8 of 8 early messages were lost before the fix).
+- README screenshots: `tools/screenshots.js` drives headless Chrome with the DevTools protocol (Node's
+  WebSocket, no Playwright). Headless Edge exits at once on the user's PC. The player shot uses a demo
+  song written in that file (original music, so no chart's notation is published).
 - alphaTab plays the recording (EnabledBackingTrack) or the synthesizer, never both. Switching recreates
   its player: carry tickPosition (not time: the synth ignores sync points and runs at the score's
   tempo), playbackRange and play state across, and restore them on playerReady. Speed and looping survive.

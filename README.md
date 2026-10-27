@@ -1,21 +1,82 @@
 # psarc2gp
 
-**Use it in your browser: <https://dmb1107.github.io/psarc2gp/>**. Nothing to install, and your files never
-leave your computer (see [Web app](#web-app-any-computer-with-a-browser)).
+Practise Rocksmith custom songs with standard notation and tab that follow the original recording.
 
-Converts Rocksmith 2014 custom songs (CDLC `.psarc`) into Guitar Pro 8 files (`.gp`) with the original
-recording embedded as the audio track and **a sync point on every beat**, so the score scrolls, the cursor
-highlights notes in time with the recording, and you can pause, jump back, loop, or switch to the
-synthesized instrument without drifting.
+### ▶ [Open the web app: dmb1107.github.io/psarc2gp](https://dmb1107.github.io/psarc2gp/)
 
-- Notation (standard + tab) for every arrangement in the file: lead, rhythm, bass, alternates, bonus parts
-- Audio decoded from Rocksmith's Wwise format to Ogg Vorbis (built-in port of ww2ogg, no extra tools)
-- Every Rocksmith beat is pinned to its exact time in the recording; nothing to line up by hand
-- Instrument tracks use Guitar Pro's own RSE sounds (bass, clean/overdriven/distorted/acoustic guitar), which
-  play in time with the recording, and start muted so you hear just the song until you unmute a part
-- Runs offline in about 1–3 seconds per song
+Free, and nothing to install. Your files never leave your computer: songs are converted inside the page and
+kept in your browser.
 
-## Install (Windows)
+<a href="https://dmb1107.github.io/psarc2gp/"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/player-dark.png">
+  <img alt="The player: bass notation and tab of a demo song, bars 5 and 6 selected and looping, the cursor in bar 5, the recording playing at 100 % speed" src="docs/images/player-light.png">
+</picture></a>
+
+## What it's for
+
+Rocksmith custom songs (CDLC: `.psarc` files shared on [CustomsForge](https://ignition4.customsforge.com/))
+cover thousands of songs, each with a note-for-note chart of the guitar and bass parts timed against the
+original recording. Rocksmith shows them as a scrolling note highway. psarc2gp turns them into what many
+players learn from instead: **standard notation and tab that scroll with the real recording**, in the
+browser or in Guitar Pro.
+
+With a converted song you can:
+
+- follow the bass or guitar part while the band plays, with a cursor on the note being played
+- loop a passage you're stuck on and slow it down; the recording keeps its pitch
+- switch to a synthesized instrument to hear just that part
+- open it in Guitar Pro 8 to fix the chart, simplify a passage or add fingering, and keep practising there
+
+Each song becomes a Guitar Pro 8 file (`.gp`) with:
+
+- notation and tab for every arrangement in the chart: lead, rhythm, bass, alternates, bonus parts
+- the original recording as the audio track, decoded from Rocksmith's Wwise format (built-in port of
+  ww2ogg, no extra tools)
+- **a sync point on every beat**, so the score never drifts from the recording; nothing to line up by hand
+- Guitar Pro's own RSE sounds for the instruments, which play in time with the recording and start muted,
+  so you hear just the song until you unmute a part
+
+Three ways to use it:
+
+| | |
+|---|---|
+| **[Web app](#the-web-app)**, any computer with a browser | convert in the page, keep a library, practise in the built-in player |
+| **[Windows + Guitar Pro 8](#guitar-pro-8-on-windows)** | right-click `.psarc` files → *Send to* → `.gp` files next to them; optional preview in Explorer |
+| **[Command line](#command-line)**, any OS with Node.js | `node bin/psarc2gp.js song.psarc` |
+
+## The web app
+
+1. Find songs on [CustomsForge Ignition](https://ignition4.customsforge.com/) and download their `.psarc`
+   files.
+2. Open **<https://dmb1107.github.io/psarc2gp/>** and drop the files, or a whole folder, on the page.
+   Each song takes a few seconds.
+3. Click a song to practise it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/library-dark.png">
+  <img alt="The library page: a drop zone for .psarc files with a link to CustomsForge Ignition, and five converted songs with their length, download and remove buttons" src="docs/images/library-light.png">
+</picture>
+
+- **Convert:** drop `.psarc` files or a folder on the page, or use *Choose files* / *Choose a folder*.
+  Conversion runs inside the page (in a background worker); nothing is uploaded. Each song is added to the
+  library; a song already there is kept unless you click *Replace it*. Existing `.gp` files can be added too.
+- **Library:** search, sort (recently played, added, artist, title), download the `.gp`, remove.
+  Songs stay in that browser on that computer (in its IndexedDB storage); clearing the site's data in the
+  browser deletes them, so download the files you want to keep.
+- **Player:** notation + tab of one track at a time (tabs at the top) with the cursor following the
+  recording. *Recording / Synth* switches between the original recording and alphaTab's synthesizer
+  (with *Only this track* on, just the part on screen), keeping your place. *Speed* goes from 25 % to
+  150 % (the recording keeps its pitch). Drag across the score to select a passage, then *Loop* repeats
+  it; with nothing selected, Loop repeats the song. Space plays and pauses. Light and dark themes.
+- The synthesizer plays at the score's written tempo, which can differ slightly from the recording's,
+  and it can't play together with the recording (an alphaTab limit). Guitar Pro can mix both.
+
+It works in current Chrome, Edge and Firefox. Safari needs version 18.4 or later (macOS 15.4 / iOS 18.4)
+to play the recording (Ogg Vorbis); older Safari shows the score but stays silent, so use Chrome there.
+
+## Guitar Pro 8 on Windows
+
+### Install
 
 1. Install [Node.js](https://nodejs.org) 20 or newer (the LTS installer is fine).
 2. Put this folder somewhere permanent, e.g. `C:\Tools\psarc2gp`.
@@ -23,7 +84,7 @@ synthesized instrument without drifting.
    **Send to** menu. `windows\uninstall.cmd` removes them. The entries run Node.js from where it is
    installed now; if you move this folder or reinstall Node.js somewhere else, run `install.cmd` again.
 
-## Use
+### Use
 
 Select one or more `.psarc` files (or a folder of them), right-click, **Send to → Guitar Pro (synced)**.
 On Windows 11 the Send to menu is under **Show more options** (or press Shift+F10).
@@ -40,23 +101,7 @@ terminal: `C:\Tools\psarc2gp\windows\install.cmd "G:\My Drive\Guitar Pro"`. Runn
 without a folder goes back to writing next to each `.psarc`. In one folder, a second chart of the same
 song is skipped like any existing file.
 
-Command line (any OS):
-
-```
-node bin/psarc2gp.js [options] <file.psarc | folder> ...
-
-  -f, --force       overwrite an existing .gp
-  -o, --out <dir>   write .gp files into this folder
-  -r, --recursive   also look in subfolders
-      --no-audio    don't embed the recording
-      --no-mute     leave the instrument tracks unmuted
-      --midi        General MIDI sounds instead of RSE (these lag the recording in Guitar Pro)
-      --atex        also write the intermediate alphaTex (.atex) for debugging
-      --pause       keep the console window open when done (used by the Send To entries)
-  -q, --quiet       only print errors
-```
-
-## In Guitar Pro
+### In Guitar Pro
 
 - The recording is the **Audio Track**; it has its own volume, mute and solo next to the instrument
   tracks. The instrument tracks start **muted**: unmute the bass (or any) track to hear its synth along with
@@ -73,7 +118,7 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
 - The cursor may look a little ahead of the sound. That is the audio output latency of your sound
   device, not the file; the synth and the recording stay together.
 
-## Preview in Explorer (optional)
+### Preview in Explorer (optional)
 
 With Explorer's preview pane open (**View → Preview pane**, or Alt+P), selecting a `.gp` file shows its
 score and starts playing the recording, with a cursor that follows along, without opening Guitar Pro.
@@ -85,36 +130,23 @@ To install it, install the .NET SDK once (`winget install Microsoft.DotNet.SDK.1
 `windows\install-preview.cmd`. It builds the add-in and registers it; Windows asks for admin rights once.
 `windows\uninstall-preview.cmd` removes it. If you move the psarc2gp folder, run the installer again.
 
-## Web app (any computer with a browser)
+## Command line
 
-The same converter runs in a web page, with a practice player and a library kept in the browser. Files
-never leave the computer: conversion runs inside the page (in a background worker) and songs are stored
-in the browser's own storage (IndexedDB). Nothing is uploaded, and the site is a set of static files.
+Any OS with [Node.js](https://nodejs.org) 20 or newer: run `npm install` once in this folder, then
 
-- **Convert:** drop `.psarc` files or a folder on the page, or use *Choose files* / *Choose a folder*.
-  Each song is added to the library; a song already there is kept unless you click *Replace it*.
-  Existing `.gp` files can be added too. The page points newcomers to
-  [CustomsForge Ignition](https://ignition4.customsforge.com/) for songs.
-- **Library:** search, sort (recently played, added, artist, title), download the `.gp`, remove.
-  Songs stay in that browser on that computer; clearing the site's data in the browser deletes them, so
-  download the files you want to keep.
-- **Player:** notation + tab of one track at a time (tabs at the top) with the cursor following the
-  recording. *Recording / Synth* switches between the original recording and alphaTab's synthesizer
-  (with *Only this track* on, just the part on screen), keeping your place. *Speed* goes from 25 % to
-  150 % (the recording keeps its pitch). Drag across the score to select a passage, then *Loop* repeats
-  it; with nothing selected, Loop repeats the song. Space plays and pauses.
-- The synthesizer plays at the score's written tempo, which can differ slightly from the recording's,
-  and it can't play together with the recording (an alphaTab limit). Guitar Pro can mix both.
+```
+node bin/psarc2gp.js [options] <file.psarc | folder> ...
 
-Run it locally with `npm run web` and open <http://localhost:8765/web/>. To put it online,
-`npm run build:web` writes the static site to `dist/site` (about 6 MB); upload that folder to any static
-host (GitHub Pages, Netlify, Cloudflare Pages). It works in current Chrome, Edge and Firefox; Safari needs
-version 18.4 or later (macOS 15.4 / iOS 18.4) to play the recording (Ogg Vorbis).
-
-**GitHub Pages:** `.github/workflows/pages.yml` runs the tests, builds the site and publishes it on every
-push to `main`. One-time setup in the repository: *Settings → Pages → Build and deployment → Source:
-GitHub Actions*. The site is then at `https://<user>.github.io/<repo>/`. Every path in the site is
-relative, so it works from a subfolder; Pages is case-sensitive, so file names must match exactly.
+  -f, --force       overwrite an existing .gp
+  -o, --out <dir>   write .gp files into this folder
+  -r, --recursive   also look in subfolders
+      --no-audio    don't embed the recording
+      --no-mute     leave the instrument tracks unmuted
+      --midi        General MIDI sounds instead of RSE (these lag the recording in Guitar Pro)
+      --atex        also write the intermediate alphaTex (.atex) for debugging
+      --pause       keep the console window open when done (used by the Send To entries)
+  -q, --quiet       only print errors
+```
 
 ## How it works
 
@@ -126,6 +158,9 @@ relative, so it works from a subfolder; Pages is case-sensitive, so file names m
         ├─ audio (.wem, Wwise Vorbis) ─ ww2ogg port ─ Ogg Vorbis with correct granule positions
         └─ alphaTab: alphaTex + audio + per-beat sync points → Guitar Pro 7/8 file
 ```
+
+The same code runs in Node.js (command line, Send To) and in the browser (the web app), which is a set
+of static files: nothing runs on a server.
 
 Rocksmith charts store notes as timestamps, not rhythms. Each beat gets the grid (16ths, 8th or 16th
 triplets, 32nds, 64ths) with the lowest timing error plus a small readability cost, so plain 16ths win
@@ -185,10 +220,19 @@ node tools/roundtrip.js out.gp # re-open a .gp and report tracks, bars, sync poi
 node tools/render-check.cjs out.gp --png shots/   # render every track in headless Chromium (needs Playwright)
 npm run web                    # serve the project at http://localhost:8765/ (web app at /web/)
 npm run build:web              # static site in dist/site
+node tools/screenshots.js .samples/*.psarc   # retake the README screenshots (headless Chrome)
 ```
 
 Charts are copyrighted, so none are in the repo. For the integration tests, put `.psarc` files (and
 optionally ToneLib `.song` exports with the same base name) in `.samples/`, or set `PSARC2GP_SAMPLES`.
+The README's player screenshot shows a short demo song written in `tools/screenshots.js` for that
+purpose; the library screenshot lists the songs you pass it.
+
+**The web app** is a static site: `npm run build:web` writes it to `dist/site` (about 6 MB), ready for any
+static host. `.github/workflows/pages.yml` runs the tests, builds the site and publishes it on GitHub
+Pages on every push to `main` (one-time setup in the repository: *Settings → Pages → Build and
+deployment → Source: GitHub Actions*). Every path in the site is relative, so it works from a subfolder
+such as `/psarc2gp/`; Pages is case-sensitive, so file names must match exactly.
 
 ```
 bin/psarc2gp.js          command line
@@ -202,6 +246,7 @@ web/                     the web app: page, conversion worker, library (IndexedD
 windows/                 Send To installer (the entries start node.exe directly)
 windows/preview/         Explorer preview pane add-in (C#, WebView2) and the page it shows (web/)
 tools/                   verification and debugging helpers
+docs/images/             README screenshots (tools/screenshots.js)
 ```
 
 ## Credits and licenses

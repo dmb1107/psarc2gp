@@ -152,6 +152,15 @@ The page, checked by driving it in the browser pane (clicks, drags, screenshots)
   chain, codebooks included, loads), and the player renders it and plays it with the synth. No real
   chart was converted on the live site (the pane can't hand it a local file); the same build converted
   real charts locally.
+- Fixed a lost first song (2026-10-27, found by the screenshot tool, which adds files the moment the page
+  loads): the conversion worker sometimes never answered, so the first song stayed at "Converting…".
+  Chrome delivers a module worker's messages while its top-level await is pending (ww2ogg's codebook
+  load), before `onmessage` exists. A message posted right after starting the worker was lost 8 of 8
+  times; with the converter imported dynamically after `onmessage` is set, 8 of 8 were answered, and the
+  screenshot tool (4 real charts + a `.gp`) passed 3 runs of 3 after failing 3 of 6 before.
+- README screenshots (`docs/images`, light and dark) come from `tools/screenshots.js`: headless Chrome
+  over the DevTools protocol, real conversions of the given charts for the library shot, and a demo song
+  written in the tool for the player shot, so no chart's notation is published. Checked by eye.
 
 Not verified: Firefox and Safari (Safari plays Ogg Vorbis from 18.4 / macOS 15.4 according to release
 reports; older Safari would show the score but not play the recording); any of the audio by ear (the
