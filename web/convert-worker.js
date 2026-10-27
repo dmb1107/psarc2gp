@@ -1,9 +1,14 @@
 // Runs the converter off the page's main thread, so the page stays responsive during the 1–3 s a song
 // takes. Messages: { id, kind: "psarc" | "gp", bytes: ArrayBuffer } in; { id, ok, song | error } out.
-import { convertPsarc, outputName } from "../src/convert.js";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs"; // not alphaTab.mjs (see src/convert.js)
 
-function fromPsarc(bytes) {
+// Imported dynamically, not statically: the converter loads its codebooks with a top-level await, and
+// Chrome delivers a module worker's messages while its top level is still awaiting, before onmessage is
+// set, so a song added right after the page opened was lost (stuck at "Converting…").
+const converter = import("../src/convert.js");
+
+async function fromPsarc(bytes) {
+  const { convertPsarc, outputName } = await converter;
   return convertPsarc(bytes).then(({ gp, meta, report }) => ({
     name: outputName(meta),
     title: meta.title ?? "", artist: meta.artist ?? "", album: meta.album ?? "",
