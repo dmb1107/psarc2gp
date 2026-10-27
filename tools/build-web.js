@@ -52,6 +52,7 @@ copy(path.join(alphaTab, "LICENSE"), path.join(vendor, "LICENSE"));
 fs.writeFileSync(path.join(out, "index.html"), `<!doctype html>
 <meta charset="utf-8">
 <title>psarc2gp</title>
+<link rel="icon" href="web/icon.svg" type="image/svg+xml">
 <meta http-equiv="refresh" content="0; url=web/">
 <a href="web/">psarc2gp</a>
 `);

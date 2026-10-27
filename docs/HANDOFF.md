@@ -115,10 +115,12 @@ forwarded to Explorer, and the browser's are off).
 `web/` (README "Web app"): drop `.psarc` files or folders → converted one at a time in a module worker →
 stored in IndexedDB → played with alphaTab. `npm run web` serves the project; `npm run build:web` writes
 a static site to `dist/site` (40 files, 6.4 MB, alphaTab's minified core under `vendor/alphatab`). The
-user shares it with a couple of friends on GitHub Pages: `.github/workflows/pages.yml` runs the tests,
-builds and deploys on every push to `main`. The repo is public, so the user chose to keep personal paths
-and their email out of it, in the whole history (commits use GitHub's noreply address; the docs say
-`%USERPROFILE%` and `<Google Drive folder>`).
+user shares it with a couple of friends at <https://dmb1107.github.io/psarc2gp/> (repo
+github.com/dmb1107/psarc2gp, public): `.github/workflows/pages.yml` runs the tests, builds and deploys
+on every push to `main`. The user chose to keep personal paths and their email out of the repo, in the
+whole history: before the first push the history was rewritten (commits use GitHub's noreply address,
+set as this repo's `user.email`; the docs say `%USERPROFILE%` and `<Google Drive folder>`). This PC has
+no SSH key, so `origin` is HTTPS (Git Credential Manager signs in).
 
 The port of `src/` (Buffer → Uint8Array, own AES and inflate, async zip rewrite):
 - A snapshot of the user's whole library (225 charts in Downloads and Rocksmith_Custom_DLC) before and
@@ -144,11 +146,17 @@ The page, checked by driving it in the browser pane (clicks, drags, screenshots)
   relative URL in the site's own files names a file with exact case (Pages is case-sensitive, Windows
   isn't); alphaTab's own fetches (worker, font, soundfont) returned 200. The CustomsForge link is on the
   library page (the user's request).
+- The live site (2026-10-27): the first workflow run passed (tests without samples, build, deploy);
+  every file served with status 200 and `.mjs` as `text/javascript`. In the browser pane: a junk
+  `.psarc` gets "not a PSARC file", a `.gp` made in the page is added (so the worker's whole import
+  chain, codebooks included, loads), and the player renders it and plays it with the synth. No real
+  chart was converted on the live site (the pane can't hand it a local file); the same build converted
+  real charts locally.
 
 Not verified: Firefox and Safari (Safari plays Ogg Vorbis from 18.4 / macOS 15.4 according to release
 reports; older Safari would show the score but not play the recording); any of the audio by ear (the
 checks are timings and alphaTab state); touch devices (selecting a passage needs mouse drags);
-a real host; opening a browser-made `.gp` in Guitar Pro 8 (identical to the CLI's, so it should open);
+a real chart on the live site; opening a browser-made `.gp` in Guitar Pro 8 (identical to the CLI's, so it should open);
 large libraries (hundreds of songs, several GB) against browser storage limits.
 
 ## Library sweep (2026-10-25)

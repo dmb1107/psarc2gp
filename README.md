@@ -1,5 +1,8 @@
 # psarc2gp
 
+**Use it in your browser: <https://dmb1107.github.io/psarc2gp/>**. Nothing to install, and your files never
+leave your computer (see [Web app](#web-app-any-computer-with-a-browser)).
+
 Converts Rocksmith 2014 custom songs (CDLC `.psarc`) into Guitar Pro 8 files (`.gp`) with the original
 recording embedded as the audio track and **a sync point on every beat**, so the score scrolls, the cursor
 highlights notes in time with the recording, and you can pause, jump back, loop, or switch to the

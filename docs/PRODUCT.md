@@ -62,7 +62,7 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Mac `_m.psarc` files | ◐ supported, untested |
 | Capo charts | ◐ supported, untested |
 | Preview a `.gp` in Explorer's preview pane: score, recording playing on its own, cursor following it (the user's request) | ✅ works in Explorer on the user's PC (confirmed by the user; autoplay and dark mode checked in a real Explorer window) |
-| Web app to share with a couple of friends: convert `.psarc` in the browser with no upload, a library kept in the browser, a player with track choice, looping, speed and a recording/synth switch (the user's request) | ◐ works in Chromium (the app's browser pane), locally and as the built static site; not yet hosted, not tried in Firefox/Safari, not heard by ear |
+| Web app to share with a couple of friends: convert `.psarc` in the browser with no upload, a library kept in the browser, a player with track choice, looping, speed and a recording/synth switch (the user's request) | ◐ live at <https://dmb1107.github.io/psarc2gp/>; works in Chromium (the app's browser pane); a real chart converted only locally, not tried in Firefox/Safari, not heard by ear |
 
 ### Later (not started; ordering is a suggestion)
 
