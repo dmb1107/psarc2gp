@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.js"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.js",
+        "dist",
+        "--port",
+        "8766"
+      ],
+      "port": 8766
+    }
+  ]
+}

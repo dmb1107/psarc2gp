@@ -1,13 +1,13 @@
 // .psarc -> Guitar Pro 8 (.gp) with the recording embedded and a sync point on every beat.
-import { createRequire } from "node:module";
+// Runs in Node and in browsers (the web app converts in a worker): bytes in, bytes out.
+// the core module: alphaTab.mjs would turn a worker that imports it into an alphaTab worker
+import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { loadSong } from "./rocksmith/song.js";
 import { wemToOgg } from "./audio/ww2ogg.js";
 import { buildAlphaTex } from "./notation/score.js";
 import { SOUNDS, useRseSounds } from "./gp/rse.js";
 import { rewriteZipEntry } from "./gp/zip.js";
-
-const require = createRequire(import.meta.url);
-const alphaTab = require("@coderline/alphatab");
+import { utf8 } from "./lib/bytes.js";
 
 export { loadSong };
 
@@ -17,7 +17,7 @@ export { loadSong };
 //               RSE plays in time with the audio track; Guitar Pro's MIDI output lags it.
 //   mute        mute the instrument tracks so only the recording plays until a track is unmuted
 //               (ignored without audio, which would leave nothing to hear)
-export function convertPsarc(psarcBuffer, { withAudio = true, rse = true, mute = true, onWarning = () => {}, song = null } = {}) {
+export async function convertPsarc(psarcBuffer, { withAudio = true, rse = true, mute = true, onWarning = () => {}, song = null } = {}) {
   const warnings = [];
   const warn = (m) => { warnings.push(m); onWarning(m); };
 
@@ -34,12 +34,12 @@ export function convertPsarc(psarcBuffer, { withAudio = true, rse = true, mute =
   if (withAudio) {
     audio = wemToOgg(song.wem);
     score.backingTrack = new alphaTab.model.BackingTrack();
-    score.backingTrack.rawAudioFile = new Uint8Array(audio.ogg);
+    score.backingTrack.rawAudioFile = audio.ogg;
   }
-  let gp = Buffer.from(new alphaTab.exporter.Gp7Exporter().export(score, settings));
+  let gp = new alphaTab.exporter.Gp7Exporter().export(score, settings);
   if (rse) {
     const keys = tracks.map((t) => t.sound);
-    gp = rewriteZipEntry(gp, "Content/score.gpif", (xml) => useRseSounds(xml.toString("utf8"), keys));
+    gp = await rewriteZipEntry(gp, "Content/score.gpif", (xml) => useRseSounds(utf8(xml), keys));
   }
 
   return {
@@ -58,6 +58,6 @@ export function convertPsarc(psarcBuffer, { withAudio = true, rse = true, mute =
 }
 
 export function outputName(meta) {
-  const clean = (s) => String(s ?? "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim();
+  const clean = (s) => String(s ?? "").replace(/[<>:"/\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim();
   return `${clean(meta.artist) || "Unknown"} - ${clean(meta.title) || "Untitled"}.gp`;
 }

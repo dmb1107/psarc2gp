@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>psarc2gp</title>
+<meta name="description" content="Convert Rocksmith 2014 custom songs (.psarc) into Guitar Pro files with the recording synced, and practise with them, all in your browser.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="appbar">
+  <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">psarc2gp</a>
+  <span class="tagline">Rocksmith songs to Guitar Pro, synced to the recording</span>
+  <button id="theme" class="quiet" type="button" title="Colour theme">Theme: system</button>
+</header>
+
+<section id="library-view" class="page" aria-label="Library">
+  <div id="drop" class="drop">
+    <p class="drop-title">Drop Rocksmith <b>.psarc</b> files or a folder here</p>
+    <p class="drop-sub">Each song becomes a Guitar Pro 8 file with the original recording and a sync point on every beat. You can also add <b>.gp</b> files.</p>
+    <p class="drop-sub">Need songs? Find Rocksmith custom songs on <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge Ignition</a>.</p>
+    <div class="drop-actions">
+      <label class="button primary">Choose files<input id="pick-files" type="file" accept=".psarc,.gp" multiple hidden></label>
+      <label class="button">Choose a folder<input id="pick-folder" type="file" webkitdirectory hidden></label>
+    </div>
+    <p class="private">Your files stay on this computer. Conversion runs inside this page and songs are kept in this browser's storage; nothing is uploaded.</p>
+  </div>
+
+  <section id="queue-section" hidden>
+    <div class="section-head">
+      <h2>Converting</h2>
+      <button id="clear-queue" class="quiet" type="button" hidden>Clear finished</button>
+    </div>
+    <ul id="queue"></ul>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Library <span id="count" class="count"></span></h2>
+      <input id="search" type="search" placeholder="Search songs" aria-label="Search songs">
+      <select id="sort" aria-label="Sort">
+        <option value="played">Recently played</option>
+        <option value="added">Recently added</option>
+        <option value="artist">Artist</option>
+        <option value="title">Title</option>
+      </select>
+    </div>
+    <ul id="songs"></ul>
+    <p id="empty" class="empty" hidden>No songs yet. Converted songs appear here.</p>
+  </section>
+  <footer id="storage" class="storage"></footer>
+</section>
+
+<section id="player-view" aria-label="Player" hidden>
+  <div class="song-head">
+    <a class="back" href="#/" title="Back to the library">&larr; Library</a>
+    <div class="song-title">
+      <h1 id="title"></h1>
+      <p id="byline"></p>
+    </div>
+    <button id="download" class="quiet" type="button">Download .gp</button>
+  </div>
+
+  <div id="controls">
+    <button id="play" type="button" aria-label="Play" title="Play (Space)" disabled>
+      <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+    </button>
+    <span id="time">0:00 / 0:00</span>
+    <input id="seek" type="range" min="0" max="0" value="0" step="100" aria-label="Position" disabled>
+
+    <div class="segmented" role="group" aria-label="Sound">
+      <button id="src-recording" type="button" aria-pressed="true" title="Play the original recording">Recording</button>
+      <button id="src-synth" type="button" aria-pressed="false" title="Play the notation with a synthesizer">Synth</button>
+    </div>
+    <label class="speed" title="Playback speed">Speed
+      <input id="speed" type="range" min="25" max="150" step="5" value="100" aria-label="Playback speed">
+      <button id="speed-value" class="quiet" type="button" title="Back to 100%">100%</button>
+    </label>
+    <button id="loop" class="toggle" type="button" aria-pressed="false" title="Repeat the selected passage, or the whole song">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7.5a2.5 2.5 0 0 1 0 5H10v-1.5h1.5a1 1 0 0 0 0-2H4V8L1.5 5.75 4 3.5zM12 11H4.5a2.5 2.5 0 0 1 0-5H6v1.5H4.5a1 1 0 0 0 0 2H12V8l2.5 2.25L12 12.5z"/></svg>
+      Loop
+    </button>
+  </div>
+
+  <nav id="track-bar" aria-label="Tracks">
+    <div id="tracks"></div>
+    <label id="solo-wrap" hidden><input id="solo" type="checkbox" checked> Only this track</label>
+    <span id="tuning"></span>
+  </nav>
+  <p id="hint-bar"><span id="hint"></span> <button id="clear-range" class="link" type="button" hidden>Clear selection</button></p>
+  <main id="viewport"><div id="score"></div></main>
+  <p id="status"></p>
+</section>
+</body>
+</html>

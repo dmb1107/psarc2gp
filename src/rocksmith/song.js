@@ -1,6 +1,7 @@
 // Loads everything the converter needs from one PSARC: song metadata, arrangements, lyrics, audio.
 import { readPsarc } from "./psarc.js";
 import { decryptSng, parseSng, maxDifficultyNotes } from "./sng.js";
+import { utf8 } from "../lib/bytes.js";
 
 const ARRANGEMENT_ORDER = { Lead: 0, Rhythm: 1, Combo: 2, Bass: 3 };
 
@@ -14,7 +15,7 @@ export function loadSong(psarcBuffer) {
   let vocals = null;
   let meta = null;
   for (const mPath of manifests) {
-    const attrs = Object.values(JSON.parse(archive.read(mPath).toString("utf8")).Entries)[0].Attributes;
+    const attrs = Object.values(JSON.parse(utf8(archive.read(mPath))).Entries)[0].Attributes;
     const key = mPath.split("/").pop().replace(/\.json$/, "");
     const sngPath = sngDir + key + ".sng";
     if (!archive.has(sngPath)) continue;

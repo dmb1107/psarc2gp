@@ -101,7 +101,7 @@ for (const file of files) {
       skipped++;
       continue;
     }
-    const result = convertPsarc(buf, { withAudio: opts.audio, mute: opts.mute, rse: opts.rse, song });
+    const result = await convertPsarc(buf, { withAudio: opts.audio, mute: opts.mute, rse: opts.rse, song });
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(outPath, result.gp);
     if (opts.atex) fs.writeFileSync(outPath.replace(/\.gp$/, ".atex"), result.tex);

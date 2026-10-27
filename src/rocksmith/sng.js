@@ -3,21 +3,20 @@
 // An .sng file is: u32 magic (0x4A), u32 platform flags, 16-byte IV, AES-256-CTR payload, 56-byte
 // signature. The decrypted payload is u32 uncompressed length + zlib stream. The decompressed data is
 // a sequence of little-endian, tightly packed, count-prefixed sections.
-import crypto from "node:crypto";
-import zlib from "node:zlib";
+import { aesCtr } from "../lib/aes.js";
+import { inflate } from "../lib/inflate.js";
+import { fromHex, utf8, view } from "../lib/bytes.js";
 
-const SNG_KEY_PC = Buffer.from("CB648DF3D12A16BF71701414E69619EC171CCA5D2A142E3E59DE7ADDA18A3A30", "hex");
-const SNG_KEY_MAC = Buffer.from("9821330E34B91F70D0A48CBD625993126970CEA09192C0E6CDA676CC9838289F", "hex");
+const SNG_KEY_PC = fromHex("CB648DF3D12A16BF71701414E69619EC171CCA5D2A142E3E59DE7ADDA18A3A30");
+const SNG_KEY_MAC = fromHex("9821330E34B91F70D0A48CBD625993126970CEA09192C0E6CDA676CC9838289F");
 
 export function decryptSng(buf, { mac = false } = {}) {
-  const magic = buf.readUInt32LE(0);
+  const magic = view(buf).getUint32(0, true);
   if (magic !== 0x4a) throw new Error(`bad SNG magic 0x${magic.toString(16)}`);
-  const iv = buf.subarray(8, 24);
-  const d = crypto.createDecipheriv("aes-256-ctr", mac ? SNG_KEY_MAC : SNG_KEY_PC, iv);
-  const plain = Buffer.concat([d.update(buf.subarray(24)), d.final()]);
-  const length = plain.readUInt32LE(0);
-  // finishFlush lets zlib stop at the end of the stream and ignore the trailing signature bytes.
-  const raw = zlib.inflateSync(plain.subarray(4), { finishFlush: zlib.constants.Z_SYNC_FLUSH });
+  const plain = aesCtr(mac ? SNG_KEY_MAC : SNG_KEY_PC, buf.subarray(8, 24), buf.subarray(24));
+  const length = view(plain).getUint32(0, true);
+  // inflate stops at the end of the stream and ignores the trailing signature bytes
+  const raw = inflate(plain.subarray(4), { sizeHint: length });
   if (raw.length !== length) throw new Error(`SNG length mismatch: header ${length}, got ${raw.length}`);
   return raw;
 }
@@ -25,21 +24,22 @@ export function decryptSng(buf, { mac = false } = {}) {
 class Reader {
   constructor(buf) {
     this.b = buf;
+    this.v = view(buf);
     this.p = 0;
   }
-  i8() { const v = this.b.readInt8(this.p); this.p += 1; return v; }
-  u8() { const v = this.b.readUInt8(this.p); this.p += 1; return v; }
-  i16() { const v = this.b.readInt16LE(this.p); this.p += 2; return v; }
-  i32() { const v = this.b.readInt32LE(this.p); this.p += 4; return v; }
-  u32() { const v = this.b.readUInt32LE(this.p); this.p += 4; return v; }
-  f32() { const v = this.b.readFloatLE(this.p); this.p += 4; return v; }
-  f64() { const v = this.b.readDoubleLE(this.p); this.p += 8; return v; }
+  i8() { const v = this.v.getInt8(this.p); this.p += 1; return v; }
+  u8() { const v = this.v.getUint8(this.p); this.p += 1; return v; }
+  i16() { const v = this.v.getInt16(this.p, true); this.p += 2; return v; }
+  i32() { const v = this.v.getInt32(this.p, true); this.p += 4; return v; }
+  u32() { const v = this.v.getUint32(this.p, true); this.p += 4; return v; }
+  f32() { const v = this.v.getFloat32(this.p, true); this.p += 4; return v; }
+  f64() { const v = this.v.getFloat64(this.p, true); this.p += 8; return v; }
   skip(n) { this.p += n; }
   str(n) {
     const s = this.b.subarray(this.p, this.p + n);
     this.p += n;
     const end = s.indexOf(0);
-    return s.toString("utf8", 0, end < 0 ? n : end);
+    return utf8(s, 0, end < 0 ? n : end);
   }
   times(n, fn) { const out = new Array(n); for (let i = 0; i < n; i++) out[i] = fn(); return out; }
   list(fn) { return this.times(this.i32(), fn); }

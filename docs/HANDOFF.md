@@ -1,4 +1,4 @@
-# Handoff: state of the project (2026-10-25)
+# Handoff: state of the project (2026-10-27)
 
 Written at the end of the first build session and updated at the end of the second, the first on the
 user's Windows PC, for whoever picks up the work next. Product intent and decisions are in
@@ -20,6 +20,8 @@ History (see `git log`):
    comes first; `tools/sweep.js` (branch `windows-sendto-node`)
 6. Send To output folder option (the user's entries write to `<Google Drive folder>`)
 7. Explorer preview pane add-in for `.gp` files (branch `windows-preview-handler`)
+8. Web app: the converter ported to run in browsers too, a library in IndexedDB, a practice player
+   (2026-10-27, see "Web app")
 
 ## Evidence
 
@@ -107,6 +109,47 @@ Explorer passes white and black to the add-in even in dark mode, so Windows' app
 
 Not verified: keyboard shortcuts typed while the preview has focus (Explorer's own, like F5, aren't
 forwarded to Explorer, and the browser's are off).
+
+## Web app (2026-10-27)
+
+`web/` (README "Web app"): drop `.psarc` files or folders → converted one at a time in a module worker →
+stored in IndexedDB → played with alphaTab. `npm run web` serves the project; `npm run build:web` writes
+a static site to `dist/site` (40 files, 6.4 MB, alphaTab's minified core under `vendor/alphatab`). The
+user shares it with a couple of friends on GitHub Pages: `.github/workflows/pages.yml` runs the tests,
+builds and deploys on every push to `main`. The repo is public, so the user chose to keep personal paths
+and their email out of it, in the whole history (commits use GitHub's noreply address; the docs say
+`%USERPROFILE%` and `<Google Drive folder>`).
+
+The port of `src/` (Buffer → Uint8Array, own AES and inflate, async zip rewrite):
+- A snapshot of the user's whole library (225 charts in Downloads and Rocksmith_Custom_DLC) before and
+  after (now `tools/snapshot.js`): identical alphaTex, Ogg, report, and every `.gp` entry's contents and the `.gp` size, for all 225;
+  total time 441 s before, 437 s after. `npm test` 44/44 (new `test/lib.test.js` checks AES and inflate
+  against node:crypto/zlib, including trailing bytes, truncation and checksums).
+- In the browser (Chromium in the Claude app's browser pane): the `.gp` files for Destroyed by Hippie
+  Powers and brutal are entry-for-entry identical to Node's, same size. Destroyed by Hippie Powers takes
+  3.6 s in the worker (about 2 s in Node).
+- Why own inflate: Chrome's DecompressionStream, given a zlib stream followed by junk, errors and
+  discards output; a probe got 131,072 of 300,000 bytes. Every SNG in the samples has trailing bytes.
+
+The page, checked by driving it in the browser pane (clicks, drags, screenshots):
+- Conversion queue, duplicate → "Already in your library" / Replace, adding a `.gp` (its length fills in
+  on first play), a non-music file ignored, library search/sort/download, storage note.
+- Player: recording plays (speed 50 % measured at 0.47× over 2 s; pitch preserved), drag-select a passage
+  + Loop repeats bars 20–21 (audio time jumps 49.2 → 44.9 s), switching to Synth mid-loop keeps place,
+  range and loop and keeps playing, track switch in synth mode solos exactly that track's two channels,
+  back to Recording, light and dark themes, phone width (375 px, no sideways scroll).
+- The built site served on its own: conversion, playback, synth (soundfont and worker from `vendor/`).
+- The built site served from a subfolder, as Pages serves it (`/site/`; the "site" launch config serves
+  `dist/`): conversion, recording and synth, with every request staying under the subfolder. Every
+  relative URL in the site's own files names a file with exact case (Pages is case-sensitive, Windows
+  isn't); alphaTab's own fetches (worker, font, soundfont) returned 200. The CustomsForge link is on the
+  library page (the user's request).
+
+Not verified: Firefox and Safari (Safari plays Ogg Vorbis from 18.4 / macOS 15.4 according to release
+reports; older Safari would show the score but not play the recording); any of the audio by ear (the
+checks are timings and alphaTab state); touch devices (selecting a passage needs mouse drags);
+a real host; opening a browser-made `.gp` in Guitar Pro 8 (identical to the CLI's, so it should open);
+large libraries (hundreds of songs, several GB) against browser storage limits.
 
 ## Library sweep (2026-10-25)
 
@@ -199,6 +242,10 @@ On the user's PC the library is in `%USERPROFILE%\Downloads` and
 5. Re-convert the samples and re-open them (`tools/roundtrip.js`).
 6. For changes to parsing or notation, `node tools/sweep.js <library folders>` before and after: no new
    failures, nothing incomplete or missing, the p95 distribution no worse.
+7. For changes that shouldn't change the output (refactoring, porting), `node tools/snapshot.js
+   before.json <library folders>` before and `after.json` after, then `--compare before.json after.json`:
+   every song identical.
+8. For the web app, run it (`npm run web`) and use it in a browser: convert, play, loop, speed, synth.
 
 ## Suggested next steps
 
@@ -217,7 +264,9 @@ In rough priority order; these are outcomes, not implementation plans.
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
 5. **Lyrics / vocal melody track.**
 6. Remaining techniques: strum direction, let-ring, fingering.
-7. Later: standalone executable; dark practice view; web version (see PRODUCT.md "Later").
+7. **Web app:** have the friends try the hosted site (Firefox, Safari, Mac); then let the Explorer
+   preview share `web/player.js` so the two players don't drift apart.
+8. Later: standalone executable (see PRODUCT.md "Later").
 
 ## Known quirks
 

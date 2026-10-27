@@ -6,3 +6,4 @@ out/
 .samples/
 windows/preview/bin/
 windows/preview/obj/
+dist/

@@ -62,17 +62,16 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Mac `_m.psarc` files | ◐ supported, untested |
 | Capo charts | ◐ supported, untested |
 | Preview a `.gp` in Explorer's preview pane: score, recording playing on its own, cursor following it (the user's request) | ✅ works in Explorer on the user's PC (confirmed by the user; autoplay and dark mode checked in a real Explorer window) |
+| Web app to share with a couple of friends: convert `.psarc` in the browser with no upload, a library kept in the browser, a player with track choice, looping, speed and a recording/synth switch (the user's request) | ◐ works in Chromium (the app's browser pane), locally and as the built static site; not yet hosted, not tried in Firefox/Safari, not heard by ear |
 
 ### Later (not started; ordering is a suggestion)
 
 - Lyrics / vocal melody track (every test chart has timed, pitched lyrics)
 - Strum direction, let-ring, left-hand fingering
 - A dark-mode practice view. Guitar Pro desktop has no dark score page, and OS colour inversion hides
-  the playback cursor. One idea: an alphaTab-based viewer that plays the same `.gp` files. (The
-  Explorer preview is a first small one: dark, synced, but read-only and pane-sized.)
+  the playback cursor. The web app's player is one now (dark or light, synced, loop and speed), but
+  read-only: editing stays in Guitar Pro.
 - A standalone Windows executable (no Node.js install)
-- Hosting as a web page (own server or GitHub Pages). Explicitly deferred by the user: don't design for it
-  now, but don't make it harder (the core is pure JavaScript with no native tools on purpose).
 
 ### Non-goals
 
@@ -138,6 +137,25 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     hold. Its COM class is registered machine-wide (one admin prompt). The user chose that over
     signing out, on a diagnosis that turned out wrong (the registry writes were only visible inside
     Claude's own session, see CLAUDE.md); a per-user install without admin rights would probably work.
+11. **A web app that converts inside the browser; no server ever receives files** (the user: "don't do
+    a real server upload"; to share with a couple of friends). A server that took in CDLC and handed
+    back `.gp` files with the recording would be storing and distributing copyrighted audio (a
+    non-goal), would cost money to run, and would make people upload 5–40 MB per song. As a static site
+    it can sit on any free host. The library lives in the browser's IndexedDB (the user asked for a
+    library kept in the browser), so it is per browser and per computer; downloads are the backup.
+12. **One converter for Node and browsers.** `src/` now works on plain byte arrays, with AES and inflate
+    written in JavaScript (`src/lib`), because the browser's own decompressor drops data when bytes follow
+    a zlib stream (Rocksmith arrangements have them) and WebCrypto has no AES-CFB. Checked: all 225 charts
+    in the user's library convert to the same alphaTex, audio and `.gp` contents as before, in the same
+    time; the browser's `.gp` files are identical to Node's.
+13. **Web player: recording or synth, not both.** alphaTab can't mix its synthesizer with the recording,
+    so the user's "toggle between synth and song" is a switch that keeps the place, the loop and the
+    speed. The synth plays at the score's written tempo and, by default, only the track on screen.
+14. **Hosted on GitHub Pages, built by GitHub Actions** (the user's choice over Netlify drag-and-drop:
+    updating the site is a push). Free Pages needs a public repo. The repo holds no charts, audio or
+    `.gp` files; before the first push the user chose to rewrite the history so that commits carry
+    GitHub's noreply address instead of their email and the docs carry no personal paths. The library
+    page links to CustomsForge Ignition for songs (the user's request).
 
 ## Observations from real use
 

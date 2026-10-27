@@ -10,16 +10,16 @@ test("crc32 check value", () => {
   assert.equal(crc32(Buffer.from("123456789")), 0xcbf43926);
 });
 
-test("zip: rewrite one entry, copy the rest byte for byte", () => {
+test("zip: rewrite one entry, copy the rest byte for byte", async () => {
   const big = Buffer.alloc(100000, 7);
-  const zip = writeZip([makeEntry("a.txt", "hello"), makeEntry("dir/", ""), makeEntry("big.bin", big)]);
-  const out = rewriteZipEntry(zip, "a.txt", (d) => d.toString() + " world");
+  const zip = writeZip([await makeEntry("a.txt", "hello"), await makeEntry("dir/", ""), await makeEntry("big.bin", big)]);
+  const out = await rewriteZipEntry(zip, "a.txt", (d) => Buffer.from(d).toString() + " world");
   const before = readZip(zip);
   const after = readZip(out);
   assert.deepEqual(after.map((e) => e.name), ["a.txt", "dir/", "big.bin"]);
-  assert.equal(entryData(after[0]).toString(), "hello world");
-  assert.ok(after[2].raw.equals(before[2].raw));
-  assert.ok(entryData(after[2]).equals(big));
+  assert.equal(Buffer.from(entryData(after[0])).toString(), "hello world");
+  assert.ok(Buffer.from(after[2].raw).equals(before[2].raw));
+  assert.ok(Buffer.from(entryData(after[2])).equals(big));
 });
 
 test("sound choice from Rocksmith tones", () => {
@@ -33,7 +33,7 @@ test("sound choice from Rocksmith tones", () => {
   assert.equal(chooseSound(arr("ac", ["ac", "$[35721]ACOUSTIC"]), { bass: false }), "acoustic");
 });
 
-test("RSE sounds and mute survive Guitar Pro export and re-import", () => {
+test("RSE sounds and mute survive Guitar Pro export and re-import", async () => {
   const tex = `\\title "t" .
 \\track "Bass" \\staff {score tabs} \\tuning (G2 D2 A1 E1) \\instrument 33 0.4.4 2.4.4 3.4.4 5.4.4 |
 \\track "Lead" \\staff {score tabs} \\instrument 30 0.6.4 2.6.4 3.6.4 5.6.4 |`;
@@ -41,9 +41,9 @@ test("RSE sounds and mute survive Guitar Pro export and re-import", () => {
   const score = alphaTab.importer.ScoreLoader.loadAlphaTex(tex, settings);
   for (const t of score.tracks) t.playbackInfo.isMute = true;
   const gp = Buffer.from(new alphaTab.exporter.Gp7Exporter().export(score, settings));
-  const out = rewriteZipEntry(gp, "Content/score.gpif", (x) => useRseSounds(x.toString(), ["bass", "distortion"]));
+  const out = await rewriteZipEntry(gp, "Content/score.gpif", (x) => useRseSounds(Buffer.from(x).toString(), ["bass", "distortion"]));
 
-  const gpif = entryData(readZip(out).find((e) => e.name === "Content/score.gpif")).toString();
+  const gpif = Buffer.from(entryData(readZip(out).find((e) => e.name === "Content/score.gpif"))).toString();
   const tracks = gpif.match(/<Track id="\d+">[\s\S]*?<\/Track>/g);
   assert.equal(tracks.length, 2);
   for (const [t, key] of [[tracks[0], "bass"], [tracks[1], "distortion"]]) {

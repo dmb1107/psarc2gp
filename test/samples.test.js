@@ -35,7 +35,8 @@ test("sample songs", { skip: files.length ? false : "no samples (see test/sample
       });
 
       await t.test("audio: Ogg length equals the Wwise sample count", () => {
-        const { ogg, sampleCount } = wemToOgg(loadSong(buf).wem);
+        const { ogg: bytes, sampleCount } = wemToOgg(loadSong(buf).wem);
+        const ogg = Buffer.from(bytes);
         // granule position of the last page = total samples
         const lastPage = ogg.lastIndexOf(Buffer.from("OggS"));
         assert.equal(Number(ogg.readBigInt64LE(lastPage + 6)), sampleCount);
@@ -50,14 +51,14 @@ test("sample songs", { skip: files.length ? false : "no samples (see test/sample
       await t.test(".gp output re-opens with audio and sync points", async () => {
         const { createRequire } = await import("node:module");
         const alphaTab = createRequire(import.meta.url)("@coderline/alphatab");
-        const { gp, report } = convertPsarc(buf);
+        const { gp, report } = await convertPsarc(buf);
         const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(gp), new alphaTab.Settings());
         assert.ok(score.backingTrack?.rawAudioFile?.length > 100000);
         assert.equal(score.masterBars.flatMap((m) => m.syncPoints ?? []).length, report.syncPoints);
         // instrument tracks: muted, on Guitar Pro's RSE engine (MIDI output lags the audio track)
         assert.ok(score.tracks.every((t) => t.playbackInfo.isMute));
         const { readZip, entryData } = await import("../src/gp/zip.js");
-        const gpif = entryData(readZip(gp).find((e) => e.name === "Content/score.gpif")).toString();
+        const gpif = Buffer.from(entryData(readZip(gp).find((e) => e.name === "Content/score.gpif"))).toString();
         assert.equal(gpif.match(/<AudioEngineState>RSE<\/AudioEngineState>/g)?.length, score.tracks.length);
         assert.ok(!gpif.includes("<AudioEngineState>MIDI"));
       });

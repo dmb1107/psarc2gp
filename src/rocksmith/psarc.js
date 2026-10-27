@@ -2,49 +2,48 @@
 //
 // Layout: 32-byte big-endian header, then a table of contents (AES-256-CFB encrypted in Rocksmith
 // archives), then zlib-compressed 64 KiB blocks. Entry 0 is the newline-separated file listing.
-import crypto from "node:crypto";
-import zlib from "node:zlib";
+import { aesCfbDecrypt } from "../lib/aes.js";
+import { inflate } from "../lib/inflate.js";
+import { concat, fromHex, latin1, utf8, view } from "../lib/bytes.js";
 
 // Public Rocksmith 2014 key used by every CDLC toolkit to read the archive table of contents.
-const PSARC_KEY = Buffer.from("C53DB23870A1A2F71CAE64061FDD0E1157309DC85204D4C5BFDF25090DF2572C", "hex");
+const PSARC_KEY = fromHex("C53DB23870A1A2F71CAE64061FDD0E1157309DC85204D4C5BFDF25090DF2572C");
 const ENCRYPTED_TOC = 4;
 
 export class PsarcError extends Error {}
 
 export function readPsarc(buf) {
-  if (buf.length < 32 || buf.toString("latin1", 0, 4) !== "PSAR") {
+  if (buf.length < 32 || latin1(buf, 0, 4) !== "PSAR") {
     throw new PsarcError("not a PSARC file");
   }
-  const compression = buf.toString("latin1", 8, 12);
+  const header = view(buf);
+  const compression = latin1(buf, 8, 12);
   if (compression !== "zlib") throw new PsarcError(`unsupported compression ${compression}`);
-  const tocLength = buf.readUInt32BE(12);
-  const entrySize = buf.readUInt32BE(16);
-  const entryCount = buf.readUInt32BE(20);
-  const blockSize = buf.readUInt32BE(24);
-  const flags = buf.readUInt32BE(28);
+  const tocLength = header.getUint32(12);
+  const entrySize = header.getUint32(16);
+  const entryCount = header.getUint32(20);
+  const blockSize = header.getUint32(24);
+  const flags = header.getUint32(28);
 
   let toc = buf.subarray(32, tocLength);
-  if (flags === ENCRYPTED_TOC) {
-    const padded = Buffer.alloc(Math.ceil(toc.length / 16) * 16);
-    toc.copy(padded);
-    const d = crypto.createDecipheriv("aes-256-cfb", PSARC_KEY, Buffer.alloc(16));
-    toc = Buffer.concat([d.update(padded), d.final()]).subarray(0, toc.length);
-  }
+  if (flags === ENCRYPTED_TOC) toc = aesCfbDecrypt(PSARC_KEY, new Uint8Array(16), toc);
+  const t = view(toc);
+  // big-endian unsigned integer of 2 to 5 bytes
+  const uintBE = (p, width) => { let v = 0; for (let i = 0; i < width; i++) v = v * 256 + toc[p + i]; return v; };
 
   const entries = [];
   for (let i = 0; i < entryCount; i++) {
-    const e = toc.subarray(i * entrySize, (i + 1) * entrySize);
+    const e = i * entrySize;
     entries.push({
-      blockIndex: e.readUInt32BE(16),
-      length: e.readUIntBE(20, 5),
-      offset: e.readUIntBE(25, 5),
+      blockIndex: t.getUint32(e + 16),
+      length: uintBE(e + 20, 5),
+      offset: uintBE(e + 25, 5),
     });
   }
   // Block-size table: one big-endian integer per block, width depends on the block size.
   const sizeWidth = blockSize <= 0x10000 ? 2 : blockSize <= 0x1000000 ? 3 : 4;
-  const sizeTable = toc.subarray(entryCount * entrySize);
   const zSizes = [];
-  for (let p = 0; p + sizeWidth <= sizeTable.length; p += sizeWidth) zSizes.push(sizeTable.readUIntBE(p, sizeWidth));
+  for (let p = entryCount * entrySize; p + sizeWidth <= toc.length; p += sizeWidth) zSizes.push(uintBE(p, sizeWidth));
 
   const extract = (entry) => {
     const parts = [];
@@ -62,7 +61,7 @@ export function readPsarc(buf) {
         offset += zSize;
         // Blocks that did not compress well are stored raw; zlib streams start with 0x78.
         try {
-          chunk = raw[0] === 0x78 ? zlib.inflateSync(raw) : raw;
+          chunk = raw[0] === 0x78 ? inflate(raw, { sizeHint: Math.min(blockSize, entry.length - have) }) : raw;
         } catch {
           chunk = raw;
         }
@@ -70,10 +69,10 @@ export function readPsarc(buf) {
       parts.push(chunk);
       have += chunk.length;
     }
-    return Buffer.concat(parts).subarray(0, entry.length);
+    return concat(parts).subarray(0, entry.length);
   };
 
-  const names = extract(entries[0]).toString("utf8").split("\n").filter((n) => n.length);
+  const names = utf8(extract(entries[0])).split("\n").filter((n) => n.length);
   const files = new Map();
   names.forEach((name, i) => files.set(name.replace(/^\/+/, ""), entries[i + 1]));
 

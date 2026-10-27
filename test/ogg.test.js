@@ -6,7 +6,8 @@ test("Ogg CRC matches the standard check value", () => {
   assert.equal(oggCrc(Buffer.from("123456789")), 0x89a1897f);
 });
 
-function parsePages(buf) {
+function parsePages(bytes) {
+  const buf = Buffer.from(bytes);
   const pages = [];
   let p = 0;
   while (p < buf.length) {

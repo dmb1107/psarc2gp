@@ -18,7 +18,7 @@ for (const [i, file] of files.entries()) {
   try {
     const buf = fs.readFileSync(file);
     const song = loadSong(buf);
-    const { report } = convertPsarc(buf, { song });
+    const { report } = await convertPsarc(buf, { song });
     const v = verify(buf);
     Object.assign(r, {
       ok: true, name: outputName(song.meta), named: !!(song.meta.artist && song.meta.title),

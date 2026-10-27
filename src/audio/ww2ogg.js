@@ -6,11 +6,14 @@
 //
 // Unlike ww2ogg, this also writes correct granule positions (what the separate "revorb" tool is
 // normally used for), so players can seek and report the right duration.
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
 import { OggWriter } from "./ogg.js";
+import { latin1, view } from "../lib/bytes.js";
 
-const CODEBOOKS_PATH = fileURLToPath(new URL("./packed_codebooks_aoTuV_603.bin", import.meta.url));
+// Loaded once when the module is imported: from disk in Node, over http in a browser.
+const CODEBOOKS_URL = new URL("./packed_codebooks_aoTuV_603.bin", import.meta.url);
+const CODEBOOKS = CODEBOOKS_URL.protocol === "file:"
+  ? new Uint8Array(await (await import("node:fs/promises")).readFile(CODEBOOKS_URL))
+  : new Uint8Array(await (await fetch(CODEBOOKS_URL)).arrayBuffer());
 let codebookLibrary = null;
 
 export class WemError extends Error {}
@@ -90,11 +93,12 @@ function maptype1Quantvals(entries, dimensions) {
 // ------------------------------------------------------------------------- packed codebook library
 function loadCodebooks() {
   if (codebookLibrary) return codebookLibrary;
-  const data = fs.readFileSync(CODEBOOKS_PATH);
-  const offsetOffset = data.readUInt32LE(data.length - 4);
+  const data = CODEBOOKS;
+  const v = view(data);
+  const offsetOffset = v.getUint32(data.length - 4, true);
   const count = (data.length - offsetOffset) / 4;
   const offsets = [];
-  for (let i = 0; i < count; i++) offsets.push(data.readUInt32LE(offsetOffset + i * 4));
+  for (let i = 0; i < count; i++) offsets.push(v.getUint32(offsetOffset + i * 4, true));
   codebookLibrary = {
     get(i) {
       if (i < 0 || i >= count - 1) throw new WemError(`invalid codebook id ${i}`);
@@ -156,22 +160,25 @@ function rebuildCodebook(cb, out) {
 
 // --------------------------------------------------------------------------------- RIFF parsing
 function parseRiff(buf) {
-  const tag = buf.toString("latin1", 0, 4);
+  const v = view(buf);
+  const u16 = (p) => v.getUint16(p, true);
+  const u32 = (p) => v.getUint32(p, true);
+  const tag = latin1(buf, 0, 4);
   if (tag !== "RIFF") throw new WemError(tag === "RIFX" ? "big-endian Wwise files are not supported" : "not a RIFF file");
-  if (buf.toString("latin1", 8, 12) !== "WAVE") throw new WemError("missing WAVE");
-  const riffSize = buf.readUInt32LE(4) + 8;
+  if (latin1(buf, 8, 12) !== "WAVE") throw new WemError("missing WAVE");
+  const riffSize = u32(4) + 8;
   const chunks = {};
   let p = 12;
   while (p + 8 <= Math.min(riffSize, buf.length)) {
-    const id = buf.toString("latin1", p, p + 4);
-    const size = buf.readUInt32LE(p + 4);
+    const id = latin1(buf, p, p + 4);
+    const size = u32(p + 4);
     chunks[id] = { offset: p + 8, size };
     p += 8 + size;
   }
   const fmt = chunks["fmt "];
   const data = chunks.data;
   if (!fmt || !data) throw new WemError("expected fmt and data chunks");
-  if (buf.readUInt16LE(fmt.offset) !== 0xffff) throw new WemError("not Wwise Vorbis (codec id != 0xFFFF)");
+  if (u16(fmt.offset) !== 0xffff) throw new WemError("not Wwise Vorbis (codec id != 0xFFFF)");
 
   let vorbOffset, vorbSize;
   if (chunks.vorb) {
@@ -188,26 +195,26 @@ function parseRiff(buf) {
   }
 
   const info = {
-    channels: buf.readUInt16LE(fmt.offset + 2),
-    sampleRate: buf.readUInt32LE(fmt.offset + 4),
-    avgBytesPerSecond: buf.readUInt32LE(fmt.offset + 8),
+    channels: u16(fmt.offset + 2),
+    sampleRate: u32(fmt.offset + 4),
+    avgBytesPerSecond: u32(fmt.offset + 8),
     dataOffset: data.offset,
     dataSize: data.size,
-    sampleCount: buf.readUInt32LE(vorbOffset),
+    sampleCount: u32(vorbOffset),
   };
   const noGranule = vorbSize === -1 || vorbSize === 0x2a;
   info.packetHeaderSize = noGranule ? 2 : 6;
   if (noGranule) {
-    const modSignal = buf.readUInt32LE(vorbOffset + 4);
+    const modSignal = u32(vorbOffset + 4);
     info.modPackets = ![0x4a, 0x4b, 0x69, 0x70].includes(modSignal);
-    info.setupOffset = buf.readUInt32LE(vorbOffset + 0x10);
-    info.firstAudioOffset = buf.readUInt32LE(vorbOffset + 0x14);
+    info.setupOffset = u32(vorbOffset + 0x10);
+    info.firstAudioOffset = u32(vorbOffset + 0x14);
     info.blocksize0Pow = buf[vorbOffset + 0x28];
     info.blocksize1Pow = buf[vorbOffset + 0x29];
   } else {
     info.modPackets = false;
-    info.setupOffset = buf.readUInt32LE(vorbOffset + 0x18);
-    info.firstAudioOffset = buf.readUInt32LE(vorbOffset + 0x1c);
+    info.setupOffset = u32(vorbOffset + 0x18);
+    info.firstAudioOffset = u32(vorbOffset + 0x1c);
     info.blocksize0Pow = buf[vorbOffset + 0x30];
     info.blocksize1Pow = buf[vorbOffset + 0x31];
   }
@@ -250,7 +257,7 @@ function commentPacket() {
 // per-mode block flags needed to rebuild audio packets and compute granule positions.
 function setupPacket(buf, info) {
   const packetOffset = info.dataOffset + info.setupOffset;
-  const size = buf.readUInt16LE(packetOffset);
+  const size = view(buf).getUint16(packetOffset, true);
   const ss = new BitReader(buf, packetOffset + info.packetHeaderSize);
   const os = vorbisHeader(5);
   const books = loadCodebooks();
@@ -418,7 +425,8 @@ export function wemToOgg(buf) {
   const { modeBlockflag, modeBits } = setup;
   const blocksize = [1 << info.blocksize0Pow, 1 << info.blocksize1Pow];
   const end = info.dataOffset + info.dataSize;
-  const readSize = (off) => buf.readUInt16LE(off);
+  const v = view(buf);
+  const readSize = (off) => v.getUint16(off, true);
   const modeOf = (payloadOffset) => {
     // In modified packets the mode number is the first field (the packet-type bit was stripped).
     const r = new BitReader(buf, payloadOffset);

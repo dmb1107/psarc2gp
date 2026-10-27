@@ -1,4 +1,6 @@
 // Minimal Ogg page writer for a single logical Vorbis stream.
+import { concat, view } from "../lib/bytes.js";
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -57,16 +59,17 @@ export class OggWriter {
 
   _flushPage({ continuedNext = false, last = false } = {}) {
     if (!this.segments.length) return;
-    const header = Buffer.alloc(27 + this.segments.length);
-    header.write("OggS", 0, "latin1");
+    const header = new Uint8Array(27 + this.segments.length);
+    const h = view(header);
+    header.set([0x4f, 0x67, 0x67, 0x53]); // "OggS"
     header[5] = (this.startsContinued ? 1 : 0) | (this.seq === 0 ? 2 : 0) | (last ? 4 : 0);
-    header.writeBigInt64LE(this.pageGranule, 6);
-    header.writeUInt32LE(this.serial, 14);
-    header.writeUInt32LE(this.seq++, 18);
+    h.setBigInt64(6, this.pageGranule, true);
+    h.setUint32(14, this.serial, true);
+    h.setUint32(18, this.seq++, true);
     header[26] = this.segments.length;
     this.segments.forEach((s, i) => { header[27 + i] = s; });
-    const page = Buffer.concat([header, ...this.chunks]);
-    page.writeUInt32LE(oggCrc(page), 22);
+    const page = concat([header, ...this.chunks]);
+    view(page).setUint32(22, oggCrc(page), true);
     this.pages.push(page);
     this.segments = [];
     this.chunks = [];
@@ -77,6 +80,6 @@ export class OggWriter {
 
   finish() {
     this._flushPage({ last: true });
-    return Buffer.concat(this.pages);
+    return concat(this.pages);
   }
 }

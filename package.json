@@ -7,7 +7,9 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "test": "node --test",
-    "convert": "node bin/psarc2gp.js"
+    "convert": "node bin/psarc2gp.js",
+    "web": "node tools/serve.js",
+    "build:web": "node tools/build-web.js"
   },
   "dependencies": {
     "@coderline/alphatab": "1.8.4"

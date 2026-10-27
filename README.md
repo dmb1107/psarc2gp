@@ -82,6 +82,37 @@ To install it, install the .NET SDK once (`winget install Microsoft.DotNet.SDK.1
 `windows\install-preview.cmd`. It builds the add-in and registers it; Windows asks for admin rights once.
 `windows\uninstall-preview.cmd` removes it. If you move the psarc2gp folder, run the installer again.
 
+## Web app (any computer with a browser)
+
+The same converter runs in a web page, with a practice player and a library kept in the browser. Files
+never leave the computer: conversion runs inside the page (in a background worker) and songs are stored
+in the browser's own storage (IndexedDB). Nothing is uploaded, and the site is a set of static files.
+
+- **Convert:** drop `.psarc` files or a folder on the page, or use *Choose files* / *Choose a folder*.
+  Each song is added to the library; a song already there is kept unless you click *Replace it*.
+  Existing `.gp` files can be added too. The page points newcomers to
+  [CustomsForge Ignition](https://ignition4.customsforge.com/) for songs.
+- **Library:** search, sort (recently played, added, artist, title), download the `.gp`, remove.
+  Songs stay in that browser on that computer; clearing the site's data in the browser deletes them, so
+  download the files you want to keep.
+- **Player:** notation + tab of one track at a time (tabs at the top) with the cursor following the
+  recording. *Recording / Synth* switches between the original recording and alphaTab's synthesizer
+  (with *Only this track* on, just the part on screen), keeping your place. *Speed* goes from 25 % to
+  150 % (the recording keeps its pitch). Drag across the score to select a passage, then *Loop* repeats
+  it; with nothing selected, Loop repeats the song. Space plays and pauses.
+- The synthesizer plays at the score's written tempo, which can differ slightly from the recording's,
+  and it can't play together with the recording (an alphaTab limit). Guitar Pro can mix both.
+
+Run it locally with `npm run web` and open <http://localhost:8765/web/>. To put it online,
+`npm run build:web` writes the static site to `dist/site` (about 6 MB); upload that folder to any static
+host (GitHub Pages, Netlify, Cloudflare Pages). It works in current Chrome, Edge and Firefox; Safari needs
+version 18.4 or later (macOS 15.4 / iOS 18.4) to play the recording (Ogg Vorbis).
+
+**GitHub Pages:** `.github/workflows/pages.yml` runs the tests, builds the site and publishes it on every
+push to `main`. One-time setup in the repository: *Settings → Pages → Build and deployment → Source:
+GitHub Actions*. The site is then at `https://<user>.github.io/<repo>/`. Every path in the site is
+relative, so it works from a subfolder; Pages is case-sensitive, so file names must match exactly.
+
 ## How it works
 
 ```
@@ -142,12 +173,15 @@ npm install
 npm test                       # unit tests; plus integration tests if ./.samples has .psarc files
 node tools/verify.js a.psarc   # bar completeness, every note present, onset error vs Rocksmith times
 node tools/sweep.js folder     # the same checks on every .psarc in a folder, converted in memory
+node tools/snapshot.js a.json folder   # fingerprint the output; --compare a.json b.json after a change
 node tools/compare-tonelib.js a.psarc a.song   # notation vs a ToneLib export of the same chart
 node tools/inspect.js a.psarc  # what's inside
 node tools/tex.js a.psarc out.atex   # the generated alphaTex
 node tools/wem2ogg.js a.psarc out.ogg
 node tools/roundtrip.js out.gp # re-open a .gp and report tracks, bars, sync points, audio
 node tools/render-check.cjs out.gp --png shots/   # render every track in headless Chromium (needs Playwright)
+npm run web                    # serve the project at http://localhost:8765/ (web app at /web/)
+npm run build:web              # static site in dist/site
 ```
 
 Charts are copyrighted, so none are in the repo. For the integration tests, put `.psarc` files (and
@@ -155,11 +189,13 @@ optionally ToneLib `.song` exports with the same base name) in `.samples/`, or s
 
 ```
 bin/psarc2gp.js          command line
-src/convert.js           psarc → .gp
+src/convert.js           psarc → .gp (runs in Node and in browsers)
 src/rocksmith/           PSARC archive, SNG arrangements, song loader
 src/audio/               Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks
 src/notation/            timeline (bars, meters, sync), arrangement (quantizing, techniques), score
 src/gp/                  RSE sounds patched into the .gp, minimal zip rewrite
+src/lib/                 byte helpers, AES (CTR, CFB) and inflate in plain JavaScript
+web/                     the web app: page, conversion worker, library (IndexedDB), player
 windows/                 Send To installer (the entries start node.exe directly)
 windows/preview/         Explorer preview pane add-in (C#, WebView2) and the page it shows (web/)
 tools/                   verification and debugging helpers
@@ -171,6 +207,9 @@ tools/                   verification and debugging helpers
   `packed_codebooks_aoTuV_603.bin` comes from it. See `src/audio/LICENSE-ww2ogg.txt`.
 - [alphaTab](https://github.com/CoderLine/alphaTab) (MPL-2.0) builds and writes the Guitar Pro file.
 - The archive keys are the public Rocksmith 2014 keys used by the community CDLC tools.
+- The web app and the Explorer preview play with alphaTab's player and its Sonivox sound font
+  (Apache-2.0), and draw with the Bravura music font (SIL OFL); `npm run build:web` includes their
+  licence files.
 - The Explorer preview uses Microsoft Edge WebView2 (its SDK is restored from NuGet when the add-in is
   built) and shows the score with alphaTab.
 

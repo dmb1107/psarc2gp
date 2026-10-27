@@ -2,7 +2,8 @@
 
 Converts Rocksmith 2014 CDLC (`.psarc`) into Guitar Pro 8 files with the original recording embedded
 and a sync point on every beat. The user runs it from Windows Explorer's **Send to** menu and practices
-and edits in Guitar Pro 8.
+and edits in Guitar Pro 8. The web app (`web/`) runs the same converter in a browser, with a library kept in
+the browser and a practice player; the user shares it with a couple of friends.
 
 Read before changing behaviour:
 - `docs/PRODUCT.md`: what it's for, requirements, decisions and why
@@ -17,11 +18,14 @@ npm test                                   # unit tests; integration tests run i
 node bin/psarc2gp.js [-f] [-o dir] <file.psarc | folder> ...
 node tools/verify.js .samples/*.psarc      # bars complete, notes present, onset error vs chart
 node tools/sweep.js <folder> ...           # verify.js on a whole library, converted in memory
+node tools/snapshot.js a.json <folder> ... # fingerprint the output; --compare a.json b.json after a change
 node tools/compare-tonelib.js X.psarc X.song
 node tools/roundtrip.js out/*.gp           # re-open .gp files and report what Guitar Pro will see
 node tools/render-check.cjs out/*.gp [--png dir]   # render every track in headless Chromium (needs Playwright)
 node tools/inspect.js | tex.js | wem2ogg.js   # look inside a .psarc / dump alphaTex / extract audio
 windows\install-preview.cmd                # build + register the Explorer preview (.NET SDK; admin prompt)
+npm run web                                # serve the project at http://localhost:8765/ (web app: /web/)
+npm run build:web                          # static site in dist/site (alphaTab paths rewritten to vendor/)
 ```
 
 ## Layout
@@ -34,11 +38,16 @@ src/audio/          Wwise → Ogg (ww2ogg port), Ogg page writer, packed codeboo
 src/notation/       timeline (bars, meters, count-in, sync points), arrangement (grid choice, durations,
                     techniques), score (assembles alphaTex)
 src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
+src/lib/            Uint8Array helpers, AES-256 CTR/CFB and inflate in plain JS (tested against node:crypto/zlib)
+web/                the web app: index.html + app.js (library view, conversion queue, routing),
+                    convert-worker.js (src/convert.js in a module worker), library.js (IndexedDB),
+                    player.js (alphaTab player: tracks, recording/synth, speed, loop)
 windows/            Send To installer (CRLF line endings, see .gitattributes; keep the .ps1 ASCII-only,
                     Windows PowerShell 5.1 reads BOM-less files as ANSI)
 windows/preview/    Explorer preview pane add-in: C# (.NET Framework 4.8) hosting WebView2, which shows
                     web/index.html; the page reads the .gp and plays it with alphaTab from node_modules
 tools/              verification and debugging helpers; tools/tonelib.js reads ToneLib .song as a test oracle
+.github/workflows/  pages.yml: on push to main, test, build the web app and publish it on GitHub Pages
 test/               node:test; samples.test.js uses real charts from .samples/
 ```
 
@@ -48,8 +57,13 @@ test/               node:test; samples.test.js uses real charts from .samples/
   convenience. Measure with `tools/verify.js`.
 - **Never overwrite** an existing `.gp` by default; users edit those files in Guitar Pro.
 - **No copyrighted material in git**: charts, audio, converted `.gp` files. Samples live in `.samples/`.
-- The converter: one runtime (Node ≥ 20), one pinned dependency (alphaTab), no native tools. This keeps
-  installation trivial and a future browser version possible. The optional Explorer preview
+- **The repo is public** (GitHub Pages). Keep the user's email, Windows user name and personal folder paths
+  out of tracked files and commit metadata; write `%USERPROFILE%\...` or a placeholder.
+- The converter: one runtime (Node ≥ 20), one pinned dependency (alphaTab), no native tools, and the same
+  code runs in browsers (the web app). Keep `src/` platform-neutral: Uint8Array/DataView, not Buffer; no
+  `node:` imports (the one exception, ww2ogg's codebook load, picks fs or fetch by URL scheme).
+- The web app never uploads anything: conversion runs in the page, songs live in the browser's IndexedDB.
+  Keep it a static site (no server code), so nobody hosting it ever handles charts or recordings. The optional Explorer preview
   (windows/preview) is the one native part (the user's decision): keep it separate from the converter.
 - Notation should give the best practice experience, not mimic ToneLib; when you deviate from ToneLib,
   record why (README "Notation choices").
@@ -89,6 +103,29 @@ test/               node:test; samples.test.js uses real charts from .samples/
   can come first in the archive.
 - Some charts aren't on their own beat grid (notes 15–30 ms off the nearest 16th). verify.js then
   reports p95 onset errors of 10–30 ms; that's the chart, not a regression (see HANDOFF.md).
+
+Web app and browser port:
+- Browsers' DecompressionStream rejects bytes after the end of a zlib stream and then drops output it
+  already decoded (Chrome lost everything past 128 KiB). SNG payloads have such bytes, hence our own
+  inflate (src/lib/inflate.js), which stops at the final block like zlib's Z_SYNC_FLUSH. WebCrypto has no
+  AES-CFB (the PSARC table of contents) and is async, hence src/lib/aes.js.
+- Only the zip rewrite is async (CompressionStream; "deflate" minus its zlib wrapper = raw deflate), so
+  `convertPsarc` and `rewriteZipEntry` return promises; `loadSong` and `wemToOgg` stay synchronous.
+- Importing alphaTab.mjs inside a worker turns that worker into an alphaTab render/synth worker (its
+  listener then throws on our messages). src/convert.js and web/convert-worker.js import alphaTab.core.mjs.
+- alphaTab plays the recording (EnabledBackingTrack) or the synthesizer, never both. Switching recreates
+  its player: carry tickPosition (not time: the synth ignores sync points and runs at the score's
+  tempo), playbackRange and play state across, and restore them on playerReady. Speed and looping survive.
+- The synth ignores tracks' saved mute state; psarc2gp files have every instrument muted, and the player
+  unmutes/solos per channel itself (changeTrackMute/changeTrackSolo).
+- alphaTab measures the container width once; `scrollbar-gutter: stable` on the scroll element keeps
+  the score from being laid out 15 px too wide when the scrollbar appears.
+- Dragging across the score selects a playback range (enableUserInteraction); a click seeks and clears it.
+- The library keeps list fields and the .gp Blob in separate object stores, so marking a song played
+  doesn't rewrite the file; updateSong reads and writes in one transaction (two updates at once lost one).
+- GitHub Pages serves the site from a subfolder (`/<repo>/`) and is case-sensitive: every URL in web/
+  must be relative and match the file name exactly (Windows hides case mistakes). The "site" launch
+  config serves `dist/`, so the built site runs at `/site/`, a subfolder like on Pages.
 
 Explorer preview (windows/preview):
 - On the user's PC, registry writes to HKCU made from Claude Code's shell are invisible to every other
