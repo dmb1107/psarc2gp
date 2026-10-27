@@ -7,10 +7,10 @@ Practise Rocksmith custom songs with standard notation and tab that follow the o
 Free, and nothing to install. Your files never leave your computer: songs are converted inside the page and
 kept in your browser.
 
-<a href="https://dmb1107.github.io/psarc2gp/"><picture>
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/player-dark.png">
   <img alt="The player: bass notation and tab of a demo song, bars 5 and 6 selected and looping, the cursor in bar 5, the recording playing at 100 % speed" src="docs/images/player-light.png">
-</picture></a>
+</picture>
 
 ## What it's for
 
