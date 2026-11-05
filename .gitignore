@@ -7,3 +7,4 @@ out/
 windows/preview/bin/
 windows/preview/obj/
 dist/
+.DS_Store
