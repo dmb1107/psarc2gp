@@ -683,6 +683,13 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
   user can use it up for everyone. Mitigation: `quota` gets its own message ("this month's shared audio
   allowance is used up; drop an audio file or try next month"); converted songs keep their audio, so only
   new songs need the API; if it's hit regularly, a paid tier or a second provider in the config.
+  What's left is shown on the setup page (2026-11-05): every RapidAPI answer carries the key's monthly
+  allowance (`x-ratelimit-requests-remaining`, `-limit`, `-reset` in seconds; read by
+  `src/songsterr/audio/quota.js`, never the plain `x-ratelimit-*`, which can be a per-second limit). The
+  browser keeps the last count per provider (localStorage `psarc2gp.web.songsterr.quota`), so it misses
+  friends' fetches since then and says so; the CLI prints it after each fetch. Browsers can read those
+  headers only if the gateway lists them in Access-Control-Expose-Headers: on its 403s it listed every
+  header it added (all its x-rapidapi-*), so it should; **not yet seen on a real 200** (no key here).
 - **Key exposure.** Anyone with the password, and any script on Songsterr's page while the bookmarklet runs,
   can read the key. Accepted for a free, card-less, single-API account; revoke by rotating the key (§3).
 - **Terms of service.** Extracting Songsterr's data and downloading YouTube audio likely break both sites'

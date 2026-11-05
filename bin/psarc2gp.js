@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { convertPsarc, loadSong, outputName } from "../src/convert.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName, validateBundle } from "../src/songsterr/convert.js";
-import { getAudio, needsSecrets, provider, config as audioConfig, AudioError, describeAudioError } from "../src/songsterr/audio/index.js";
+import { getAudio, needsSecrets, provider, config as audioConfig, AudioError, describeAudioError, describeQuota } from "../src/songsterr/audio/index.js";
 import { decryptSecrets } from "../src/songsterr/secrets.js";
 import { ask } from "./prompt.js";
 
@@ -219,7 +219,7 @@ async function convertBundle(file) {
   log(`    ${r.bars} bars (${r.playedBars} played), ${r.video ? `${r.syncPoints} sync points from video ${r.video.videoId} (${r.video.feature})` : "no sync points (no video fits)"}` +
     `${r.audioSeconds ? `, ${fmtTime(r.audioSeconds)} of audio${r.audioProvider === "file" ? "" : ` from ${provider(r.audioProvider).label}`}` : ""}`);
   if (got && (got.offsetMs || opts.nudge)) log(`    sync shifted ${got.offsetMs + opts.nudge} ms (${[got.offsetMs && `${got.offsetMs} for ${provider(got.provider).label}`, opts.nudge && `${opts.nudge} nudge`].filter(Boolean).join(" + ")})`);
-  if (got?.meta?.quotaRemaining != null) log(`    shared audio allowance left: ${got.meta.quotaRemaining} requests`);
+  for (const [id, q] of Object.entries(got?.quotas ?? {})) log(`    shared audio allowance (${provider(id).label}): ${describeQuota(q)}`);
   for (const t of r.tracks) log(`    ${t.name}: ${t.notes} notes, ${t.kind === "vocals" ? (t.syllables ? `${t.syllables} syllables of lyrics, ` : "") : t.tuning ? `tuning ${t.tuning}, ` : ""}${t.soundName}${r.muted || t.kind === "vocals" ? " (muted)" : ""}${t.graceNotes ? `; ${t.graceNotes} grace notes` : ""}`);
   for (const w of r.warnings) log(`    warning: ${w}`);
   return "converted";

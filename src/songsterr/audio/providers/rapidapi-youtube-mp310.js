@@ -4,6 +4,7 @@
 // (converted on request). The error answers below follow RapidAPI's gateway conventions (401/403 key,
 // 429 quota or rate limit) and haven't all been seen from this API yet.
 import { AudioError } from "../errors.js";
+import { readQuota } from "../quota.js";
 
 export const id = "rapidapi-youtube-mp310";
 export const label = "RapidAPI YouTube MP3";
@@ -12,7 +13,19 @@ export const needsSecret = true;
 const HOST = "youtube-mp310.p.rapidapi.com";
 const isAbort = (e, signal) => signal?.aborted || e?.name === "AbortError";
 
-export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, signal, onProgress = () => {} }) {
+// The allowance the gateway reported rides along on the result (meta.quota) and on any error after it
+// answered (err.quota), so a failed video still updates what the setup page shows.
+export async function fetchAudio(options) {
+  const seen = { quota: null };
+  try {
+    return await run(options, seen);
+  } catch (e) {
+    if (e instanceof AudioError && seen.quota && !e.quota) e.quota = seen.quota;
+    throw e;
+  }
+}
+
+async function run({ videoId, secret, fetch = globalThis.fetch, signal, onProgress = () => {} }, seen) {
   if (!/^[\w-]{11}$/.test(videoId ?? "")) throw new AudioError("not-found", `${JSON.stringify(videoId)} isn't a YouTube video id`);
   if (!secret) throw new AudioError("auth", "no RapidAPI key", { missingSecret: true });
 
@@ -25,7 +38,7 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
     if (isAbort(e, signal)) throw e;
     throw new AudioError("unavailable", `couldn't reach ${HOST} (${e.message})`);
   }
-  const quotaRemaining = r.headers.get("x-ratelimit-requests-remaining");
+  seen.quota = readQuota(r.headers);
   const text = await r.text().catch(() => "");
   let body = null;
   try { body = JSON.parse(text); } catch { /* not JSON */ }
@@ -51,7 +64,7 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
   }
   if (!f.ok) throw new AudioError(f.status === 404 || f.status === 410 ? "failed" : "unavailable", `the file host ${url.host} answered ${f.status}`);
   const bytes = await readBody(f, signal, onProgress);
-  return { bytes, format: null, provider: id, meta: { downloadHost: url.host, quotaRemaining: quotaRemaining == null ? null : Number(quotaRemaining) } };
+  return { bytes, format: null, provider: id, meta: { downloadHost: url.host, quota: seen.quota } };
 }
 
 // RapidAPI gateway answers (shared with the other RapidAPI provider)

@@ -2,7 +2,7 @@
 // Guitar Pro files, keep them in a library in this browser, and practise with them. Conversion runs on this
 // computer and nothing is uploaded; a Songsterr song's audio is fetched by video id from a conversion service.
 import { Player } from "./player.js";
-import { initSongsterrPage, openSongFile, takeInviteFromAddress } from "./songsterr.js";
+import { initSongsterrPage, openSongFile, rememberQuotas, takeInviteFromAddress } from "./songsterr.js";
 import { allSongs, deleteSong, getFile, getSong, isPersistent, putSong, songId, storageEstimate, updateSong } from "./library.js";
 
 const $ = (id) => document.getElementById(id);
@@ -211,6 +211,7 @@ async function pump() {
 
 async function finish(item, result) {
   busy = null;
+  rememberQuotas(result?.quotas); // the audio allowance, whether or not the song converted
   try {
     if (!result.ok) throw new Error(result.error);
     const s = result.song;

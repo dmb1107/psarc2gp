@@ -228,6 +228,12 @@ legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
 .bookmarklet[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
 .setup-part { margin-bottom: 26px; }
 .setup-part h2 { margin-bottom: 6px; }
+.build { margin-top: 32px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.build a { color: inherit; }
+.quota { margin-top: 14px; }
+.quota h3 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; }
+.quota ul { margin: 0; padding-left: 20px; }
+.quota li { margin-bottom: 2px; }
 #ss-empty p { margin: 0; }
 #ss-empty .note { margin-top: 6px; }
 #ss-notice { margin: 0 auto 12px; }

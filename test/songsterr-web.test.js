@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
-import { buildBookmarklet, SONGSTERR_ORIGIN } from "../web/songsterr.js";
+import { buildBookmarklet, SONGSTERR_ORIGIN, quotaLines } from "../web/songsterr.js";
 import { validateBundle } from "../src/songsterr/bundle.js";
 
 const SOURCE = fs.readFileSync(new URL("../web/songsterr-bookmarklet.js", import.meta.url), "utf8");
@@ -160,4 +160,21 @@ test("bookmarklet: says what's wrong instead of sending", async () => {
 
 test("the page accepts songs from Songsterr's origin only", () => {
   assert.equal(SONGSTERR_ORIGIN, "https://www.songsterr.com");
+});
+
+test("setup page: the audio allowance, main service first, with what's known and when", () => {
+  const now = new Date(2026, 10, 5, 15, 0).getTime();
+  const day = 86400000;
+  assert.deepEqual(quotaLines({}, now), []);
+  const lines = quotaLines({
+    "rapidapi-youtube-mp36": { remaining: 300, limit: null, resetAt: null, seenAt: now - 3 * day },
+    "rapidapi-youtube-mp310": { remaining: 241, limit: 300, resetAt: now + 12 * day, seenAt: now - 60000 },
+  }, now);
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /^Main service: 241 of 300 left, renews on .+ \(as of today, .+\)$/);
+  assert.match(lines[1], /^Backup service: 300 left \(as of .+\)$/);
+  assert.doesNotMatch(lines[1], /today/);
+  // the allowance has renewed since it was seen: the old count isn't shown as current
+  const [renewed] = quotaLines({ "rapidapi-youtube-mp310": { remaining: 3, limit: 300, resetAt: now - day, seenAt: now - 5 * day } }, now);
+  assert.match(renewed, /^Main service: renewed on .+ \(3 were left on .+\); the new count shows after the next fetch$/);
 });

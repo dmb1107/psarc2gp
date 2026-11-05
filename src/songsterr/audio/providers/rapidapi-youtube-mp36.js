@@ -7,6 +7,7 @@
 // carries X-RUN: md5 of the RapidAPI username, so the secret is "<key>" or "<key>:<that md5>".
 import { AudioError } from "../errors.js";
 import { classify, readBody } from "./rapidapi-youtube-mp310.js";
+import { readQuota } from "../quota.js";
 
 export const id = "rapidapi-youtube-mp36";
 export const label = "RapidAPI YouTube MP3 (mp36)";
@@ -33,7 +34,18 @@ export function parseSecret(secret) {
   return { key, xrun: xrun || null };
 }
 
-export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, signal, onProgress = () => {} }) {
+// the allowance seen rides along on the result (meta.quota) and on errors (err.quota), as in mp310
+export async function fetchAudio(options) {
+  const seen = { quota: null };
+  try {
+    return await run(options, seen);
+  } catch (e) {
+    if (e instanceof AudioError && seen.quota && !e.quota) e.quota = seen.quota;
+    throw e;
+  }
+}
+
+async function run({ videoId, secret, fetch = globalThis.fetch, signal, onProgress = () => {} }, seen) {
   if (!/^[\w-]{11}$/.test(videoId ?? "")) throw new AudioError("not-found", `${JSON.stringify(videoId)} isn't a YouTube video id`);
   if (!secret) throw new AudioError("auth", "no RapidAPI key", { missingSecret: true });
   const { key, xrun } = parseSecret(secret);
@@ -41,7 +53,7 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
   onProgress({ stage: "converting" });
   const api = `https://${HOST}/dl?id=${encodeURIComponent(videoId)}`;
   const until = Date.now() + timing.maxWaitMs;
-  let body = null, quotaRemaining = null;
+  let body = null;
   for (let first = true; ; first = false) {
     if (!first) await sleep(timing.pollMs, signal);
     let r;
@@ -51,7 +63,7 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
       if (isAbort(e, signal)) throw e;
       throw new AudioError("unavailable", `couldn't reach ${HOST} (${e.message})`);
     }
-    quotaRemaining = r.headers.get("x-ratelimit-requests-remaining") ?? quotaRemaining;
+    seen.quota = readQuota(r.headers) ?? seen.quota;
     const text = await r.text().catch(() => "");
     body = null;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
@@ -84,5 +96,5 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
     throw new AudioError(f.status === 404 || f.status === 410 ? "failed" : "unavailable", `the file host ${url.host} answered ${f.status}${hint}`);
   }
   const bytes = await readBody(f, signal, onProgress);
-  return { bytes, format: null, provider: id, meta: { downloadHost: url.host, quotaRemaining: quotaRemaining == null ? null : Number(quotaRemaining) } };
+  return { bytes, format: null, provider: id, meta: { downloadHost: url.host, quota: seen.quota } };
 }

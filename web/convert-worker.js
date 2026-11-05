@@ -3,7 +3,9 @@
 //   { id, kind: "psarc" | "gp", name, bytes: ArrayBuffer }
 //   { id, kind: "songsterr-inspect", bundle, tracks }      which videos fit (fetches those tracks' tabs)
 //   { id, kind: "songsterr", bundle, tracks, video, audio: "fetch" | "file" | "none", file, secrets, nudge }
-// out: { id, progress } while working, then { id, ok, song | info | error, code? }.
+// out: { id, progress } while working, then { id, ok, song | info | error, code?, quotas? }.
+// quotas: the audio services' monthly allowance as their answers reported it (src/songsterr/audio/quota.js),
+// sent whether the song converted or not, so the setup page shows what's left.
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs"; // not alphaTab.mjs (see src/convert.js)
 
 // Imported dynamically, not statically: the converter loads its codebooks with a top-level await, and
@@ -45,18 +47,25 @@ async function inspect({ bundle, tracks }) {
   return { bars: score.masterBars.length, playedBars: played.length, emptyBarsLeftOut, videos, trackData: data.map((d) => ({ index: d.index, data: d.data })) };
 }
 
-async function fromSongsterr({ bundle, tracks, video, audio: choice, file, secrets, nudge = 0 }, progress) {
+async function fromSongsterr({ bundle, tracks, video, audio: choice, file, secrets, nudge = 0 }, progress, seen) {
   const { convertSongsterr } = await songsterr;
   const { getAudio } = await audioModule;
   let audio = null;
   if (choice === "fetch" || choice === "file") {
     audio = async ({ videoId, lastPoint }) => {
       progress({ stage: "audio", videoId });
-      const got = await getAudio(videoId, {
-        secrets, minSeconds: lastPoint,
-        file: choice === "file" ? { bytes: new Uint8Array(file.bytes), name: file.name } : null,
-        onProgress: progress,
-      });
+      let got;
+      try {
+        got = await getAudio(videoId, {
+          secrets, minSeconds: lastPoint,
+          file: choice === "file" ? { bytes: new Uint8Array(file.bytes), name: file.name } : null,
+          onProgress: progress,
+        });
+      } catch (e) {
+        Object.assign(seen, e?.quotas);
+        throw e;
+      }
+      Object.assign(seen, got.quotas);
       progress({ stage: "building" });
       return { ...got, offsetMs: got.offsetMs + nudge };
     };
@@ -78,25 +87,27 @@ async function fromSongsterr({ bundle, tracks, video, audio: choice, file, secre
 self.onmessage = async ({ data: msg }) => {
   const { id, kind } = msg;
   const progress = (p) => self.postMessage({ id, progress: p });
+  const quotas = {};
+  const withQuotas = (m) => (Object.keys(quotas).length ? { ...m, quotas } : m);
   try {
     if (kind === "songsterr-inspect") {
       self.postMessage({ id, ok: true, info: await inspect(msg) });
       return;
     }
-    const song = kind === "songsterr" ? await fromSongsterr(msg, progress)
+    const song = kind === "songsterr" ? await fromSongsterr(msg, progress, quotas)
       : kind === "psarc" ? await fromPsarc(new Uint8Array(msg.bytes)) : fromGp(new Uint8Array(msg.bytes), msg.name);
-    self.postMessage({ id, ok: true, song }, [song.gp.buffer]);
+    self.postMessage(withQuotas({ id, ok: true, song }), [song.gp.buffer]);
   } catch (err) {
     // AudioError's class doesn't survive postMessage: send its code and the wording users read
     const am = await audioModule.catch(() => null);
     const audioError = !!am && err instanceof am.AudioError;
-    self.postMessage({
+    self.postMessage(withQuotas({
       id, ok: false,
       // the user's own file: its own message says what's wrong with it ("… s long but the last bar starts …")
       error: audioError ? (err.provider === "file" ? `the audio file doesn't fit: ${err.message}` : am.describeAudioError(err)) : err?.message ?? String(err),
       detail: audioError ? err.message : null,
       code: audioError ? err.code : null,
       missingSecret: !!err?.missingSecret,
-    });
+    }));
   }
 };

@@ -11,6 +11,7 @@
 import { decryptSecrets } from "../src/songsterr/secrets.js";
 import { validateBundle, defaultTrackIndices, trackKind, songsterrOutputName } from "../src/songsterr/bundle.js";
 import { chooseVideo } from "../src/songsterr/sync.js";
+import audioConfig from "../src/songsterr/audio/config.js";
 
 export const SONGSTERR_ORIGIN = "https://www.songsterr.com";
 const PASSWORD_KEY = "psarc2gp.web.songsterr.password";
@@ -74,6 +75,27 @@ export function forget() {
 const listeners = new Set();
 const changed = () => { for (const f of listeners) f(); };
 
+// ------------------------------------------------------------------------------- the allowance
+// What the audio services last said about the shared key's monthly allowance, per provider, as this browser
+// saw it: { providerId: { remaining, limit, resetAt, seenAt } } (src/songsterr/audio/quota.js). The key
+// is shared, so friends' fetches since then aren't counted; the setup page says so.
+const QUOTA_KEY = "psarc2gp.web.songsterr.quota";
+export function knownQuotas() {
+  try {
+    const v = JSON.parse(localStorage.getItem(QUOTA_KEY) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch { return {}; }
+}
+export function rememberQuotas(quotas) {
+  if (!quotas || typeof quotas !== "object" || !Object.keys(quotas).length) return;
+  const all = knownQuotas();
+  for (const [id, q] of Object.entries(quotas)) {
+    if (Number.isFinite(q?.remaining) && !(all[id]?.seenAt > q.seenAt)) all[id] = q;
+  }
+  try { localStorage.setItem(QUOTA_KEY, JSON.stringify(all)); } catch { /* not kept */ }
+  changed();
+}
+
 // "#unlock=<password>" opens the key, then leaves the address (and the back history) without it.
 // Call before the first route(); returns a promise of a message for the page, or null.
 export function takeInviteFromAddress() {
@@ -133,6 +155,7 @@ let tracksShownFor = null; // the track list is built once per song, so re-rende
 export function initSongsterrPage(options) {
   ({ ask, enqueue } = options);
   listeners.add(renderKey);
+  listeners.add(renderQuota);
   listeners.add(renderBookmarklet);
   listeners.add(renderAudio);
   window.addEventListener("message", onMessage);
@@ -169,6 +192,7 @@ export function initSongsterrPage(options) {
     if (e.target.name === "track") renderTracksNote();
   });
   renderKey();
+  renderQuota();
   renderBookmarklet();
   renderSong();
 }
@@ -195,6 +219,32 @@ async function renderKey() {
   $("ss-key-none").hidden = exists;
   $("ss-key-locked").hidden = !exists || unlocked;
   $("ss-key-unlocked").hidden = !exists || !unlocked;
+}
+
+// "Audio fetches left this month": one line per audio service, main one first
+export function quotaLines(quotas, now = Date.now()) {
+  const day = (t) => new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const seen = (t) => (new Date(t).toDateString() === new Date(now).toDateString()
+    ? `today, ${new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : day(t));
+  const ids = audioConfig.providers.filter((id) => id !== "file");
+  return ids.filter((id) => quotas[id]).map((id) => {
+    const q = quotas[id];
+    const name = id === ids[0] ? "Main service" : "Backup service";
+    if (q.resetAt != null && q.resetAt <= now) return `${name}: renewed on ${day(q.resetAt)} (${q.remaining} were left on ${day(q.seenAt)}); the new count shows after the next fetch`;
+    const left = q.limit != null ? `${q.remaining} of ${q.limit} left` : `${q.remaining} left`;
+    return `${name}: ${left}${q.resetAt != null ? `, renews on ${day(q.resetAt)}` : ""} (as of ${seen(q.seenAt)})`;
+  });
+}
+
+async function renderQuota() {
+  const box = $("ss-quota");
+  const lines = quotaLines(knownQuotas());
+  box.hidden = !(await hasKeyFile()) || (!lines.length && !isUnlocked());
+  $("ss-quota-list").replaceChildren(...lines.map((t) => el("li", { textContent: t })));
+  $("ss-quota-list").hidden = !lines.length;
+  $("ss-quota-note").textContent = lines.length
+    ? "Counted when this browser last fetched a song's audio: songs your friends fetched since then aren't in it. When the main service runs out, the backup takes over."
+    : "Not known in this browser yet: it shows here after tab2gp fetches a song's audio.";
 }
 
 async function renderBookmarklet() {

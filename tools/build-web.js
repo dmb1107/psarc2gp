@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.resolve(process.argv[2] ?? path.join(root, "dist", "site"));
@@ -37,6 +38,27 @@ function copyDir(from, to, options) {
 
 copyDir(path.join(root, "web"), path.join(out, "web"), { rewrite: true });
 copyDir(path.join(root, "src"), path.join(out, "src"), { rewrite: true });
+
+// The build number at the foot of the setup page: GitHub Actions' run number and the commit (linked), or
+// "Local build" and a + when the working tree has changes. It's in the HTML, so it names the page that's
+// actually running (a cached old copy shows its own number).
+const DEV_BUILD = "Development copy (not built)";
+const git = (...args) => { try { return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return ""; } };
+const fullSha = process.env.GITHUB_SHA ?? git("rev-parse", "HEAD");
+const sha = fullSha.slice(0, 7);
+const dirty = !process.env.GITHUB_SHA && git("status", "--porcelain") !== "";
+const run = process.env.GITHUB_RUN_NUMBER;
+const repo = process.env.GITHUB_REPOSITORY;
+const day = new Date().toISOString().slice(0, 10);
+const commit = !/^[0-9a-f]{7}$/.test(sha) ? ""
+  : repo && /^[\w.-]+\/[\w.-]+$/.test(repo) && /^[0-9a-f]{40}$/.test(fullSha)
+    ? ` · <a href="https://github.com/${repo}/commit/${fullSha}" target="_blank" rel="noopener">${sha}</a>`
+    : ` · ${sha}${dirty ? "+" : ""}`;
+const build = `${/^\d+$/.test(run ?? "") ? `Build ${run}` : "Local build"}${commit} · ${day}`;
+const page = path.join(out, "web", "index.html");
+const html = fs.readFileSync(page, "utf8");
+if (!html.includes(DEV_BUILD)) throw new Error(`web/index.html has no "${DEV_BUILD}" to replace with the build number`);
+fs.writeFileSync(page, html.replace(DEV_BUILD, build));
 
 const vendor = path.join(out, "vendor", "alphatab");
 const dist = path.join(alphaTab, "dist");

@@ -130,7 +130,7 @@
   </section>
 
   <section class="setup-part">
-    <h2>Songsterr: 1. The shared audio key (optional)</h2>
+    <h2>Shared audio key for Songsterr (optional)</h2>
     <p class="note">tab2gp gets a Songsterr video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file of the video instead.</p>
     <div id="ss-key-locked" hidden>
       <form id="ss-unlock-form" class="row">
@@ -143,12 +143,17 @@
       <button id="ss-invite" type="button">Copy invite link</button>
       <button id="ss-forget" class="quiet" type="button">Forget the password</button>
     </div>
+    <div id="ss-quota" class="quota" hidden>
+      <h3>Audio fetches left this month</h3>
+      <ul id="ss-quota-list"></ul>
+      <p id="ss-quota-note" class="note"></p>
+    </div>
     <p id="ss-key-none" class="note" hidden>This copy of tab2gp has no shared audio key: songs need your own audio file.</p>
     <p id="ss-key-message" class="note" role="status"></p>
   </section>
 
   <section class="setup-part">
-    <h2>Songsterr: 2. The bookmark</h2>
+    <h2>Songsterr bookmark</h2>
     <ol class="steps">
       <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in tab2gp</a>
         <p id="ss-bookmarklet-key" class="note"></p></li>
@@ -158,6 +163,8 @@
     <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to tab2gp. If the handover doesn't work, its panel saves the song as a file instead:
       <label class="link">open a saved song file<input id="ss-pick" type="file" accept=".json,application/json" hidden></label> (or drop it on the library page).</p>
   </section>
+
+  <p id="build" class="note build">Development copy (not built)</p>
 </section>
 
 <section id="player-view" aria-label="Player" hidden>

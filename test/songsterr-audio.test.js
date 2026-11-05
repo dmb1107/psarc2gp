@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { getAudio, PROVIDERS, needsSecrets, AudioError, describeAudioError, AUDIO_ERROR_CODES, config } from "../src/songsterr/audio/index.js";
+import { getAudio, PROVIDERS, needsSecrets, AudioError, describeAudioError, AUDIO_ERROR_CODES, config, readQuota, describeQuota } from "../src/songsterr/audio/index.js";
 import { encryptSecrets, decryptSecrets } from "../src/songsterr/secrets.js";
 import { convertSongsterr } from "../src/songsterr/convert.js";
 import { timing as mp36Timing, parseSecret } from "../src/songsterr/audio/providers/rapidapi-youtube-mp36.js";
@@ -50,7 +50,7 @@ const FILE = "https://files.example/";
 const SCENARIOS = {
   "rapidapi-youtube-mp310": {
     secret: "test-key-123",
-    ok: (audio) => fakeFetch([[API, json(200, { downloadUrl: `${FILE}a.mp3` }, { "x-ratelimit-requests-remaining": "41" })], [FILE, bytes(audio)]]),
+    ok: (audio) => fakeFetch([[API, json(200, { downloadUrl: `${FILE}a.mp3` }, { "x-ratelimit-requests-remaining": "41", "x-ratelimit-requests-limit": "50", "x-ratelimit-requests-reset": "86400" })], [FILE, bytes(audio)]]),
     auth: () => fakeFetch([[API, json(403, { message: "You are not subscribed to this API." })]]),
     quota: () => fakeFetch([[API, json(429, { message: "You have exceeded the MONTHLY quota for Requests on your current plan, BASIC." })]]),
     "not-found": () => fakeFetch([[API, json(200, { error: "Video unavailable" })]]),
@@ -127,7 +127,10 @@ test("RapidAPI: the key goes in the RapidAPI headers, other answers map to codes
   assert.equal(f.calls[0].headers["x-rapidapi-key"], "k");
   assert.equal(f.calls[0].headers["x-rapidapi-host"], "youtube-mp310.p.rapidapi.com");
   assert.ok(f.calls[0].url.includes(encodeURIComponent(`https://www.youtube.com/watch?v=${VIDEO}`)));
-  assert.equal(a.meta.quotaRemaining, 41);
+  assert.equal(a.meta.quota.remaining, 41);
+  assert.equal(a.meta.quota.limit, 50);
+  assert.ok(Math.abs(a.meta.quota.resetAt - Date.now() - 86400000) < 5000);
+  assert.deepEqual(a.quotas, { [id]: a.meta.quota });
   assert.equal(a.meta.downloadHost, "files.example");
   await assert.rejects(run([[API, json(401, { message: "Invalid API key." })]]), { code: "auth" });
   await assert.rejects(run([[API, json(429, { message: "Too many requests" })]]), { code: "unavailable" });
@@ -138,6 +141,51 @@ test("RapidAPI: the key goes in the RapidAPI headers, other answers map to codes
   await assert.rejects(run([[API, json(200, { downloadUrl: `${FILE}x` })], [FILE, bytes(new Uint8Array(1), 503)]]), { code: "unavailable" });
   await assert.rejects(run([[API, json(200, { downloadUrl: `${FILE}x` })], [FILE, offline]]), { code: "unavailable" });
   await assert.rejects(getAudio("not a video", { providers: [id], secrets: { [id]: "k" }, fetch: offline }), { code: "not-found" });
+});
+
+// ---- the monthly allowance
+
+test("allowance: read from RapidAPI's monthly headers only, and worded for the CLI", () => {
+  const h = (o) => new Headers(o);
+  const now = Date.UTC(2026, 10, 5);
+  assert.deepEqual(readQuota(h({ "x-ratelimit-requests-remaining": "241", "x-ratelimit-requests-limit": "300", "x-ratelimit-requests-reset": String(12 * 86400) }), now),
+    { remaining: 241, limit: 300, resetAt: now + 12 * 86400000, seenAt: now });
+  assert.deepEqual(readQuota(h({ "x-ratelimit-requests-remaining": "7" }), now), { remaining: 7, limit: null, resetAt: null, seenAt: now });
+  // a per-second limit is not the monthly allowance; nonsense is nothing
+  assert.equal(readQuota(h({ "x-ratelimit-remaining": "4", "x-ratelimit-limit": "5" }), now), null);
+  assert.equal(readQuota(h({ "x-ratelimit-requests-remaining": "lots" }), now), null);
+  assert.equal(readQuota(null, now), null);
+  assert.equal(describeQuota({ remaining: 241, limit: 300, resetAt: now + 12 * 86400000 }, now), "241 of 300 left, renews in 12 days");
+  assert.equal(describeQuota({ remaining: 7, limit: null, resetAt: null }, now), "7 left");
+  assert.equal(describeQuota({ remaining: 7, limit: 300, resetAt: now - 1 }, now), "7 of 300 left");
+});
+
+test("allowance: every provider tried reports it, on success, on failure and when it's used up", async () => {
+  const first = "rapidapi-youtube-mp310", backup = "rapidapi-youtube-mp36";
+  const secrets = { [first]: "k1", [backup]: "k2" };
+  const used = { "x-ratelimit-requests-remaining": "0", "x-ratelimit-requests-limit": "50" };
+  // the first is used up (with headers), the backup delivers: both counts come back
+  let a = await getAudio(VIDEO, { secrets, fetch: fakeFetch([[API, json(429, { message: "You have exceeded the MONTHLY quota" }, used)], ...SCENARIOS[backup].ok(MP3_10S).routes]) });
+  assert.equal(a.provider, backup);
+  assert.equal(a.quotas[first].remaining, 0);
+  assert.equal(a.quotas[first].limit, 50);
+  assert.equal(a.quotas[backup].remaining, 299);
+  // used up without headers: still 0 left
+  let e = await getAudio(VIDEO, { secrets, fetch: fakeFetch([...SCENARIOS[first].quota().routes, [MP36, offline]]) }).catch((x) => x);
+  assert.equal(e.code, "quota");
+  assert.deepEqual(Object.keys(e.quotas), [first]);
+  assert.equal(e.quotas[first].remaining, 0);
+  // the API answered (and counted) but the audio was refused: the count is kept
+  e = await getAudio(VIDEO, { providers: [first], secrets, fetch: SCENARIOS[first].ok(WEBM) }).catch((x) => x);
+  assert.equal(e.code, "failed");
+  assert.equal(e.quotas[first].remaining, 41);
+  // an error after the API answered (the file host is down) carries it too
+  e = await getAudio(VIDEO, { providers: [first], secrets, fetch: fakeFetch([[API, json(200, { downloadUrl: `${FILE}x` }, { "x-ratelimit-requests-remaining": "12" })], [FILE, offline]]) }).catch((x) => x);
+  assert.equal(e.code, "unavailable");
+  assert.equal(e.quotas[first].remaining, 12);
+  // a file needs no allowance
+  a = await getAudio(VIDEO, { file: { bytes: MP3_10S } });
+  assert.deepEqual(a.quotas, {});
 });
 
 // ---- fallback order and the file provider
