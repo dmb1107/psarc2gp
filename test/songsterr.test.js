@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
-import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos } from "../src/songsterr/sync.js";
+import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
 
@@ -240,6 +240,51 @@ test("convert: a video with a stray point syncs every bar from the others, with 
   assert.match(warnings.join("\n"), /point 4 splits played bar 3 \(written bar 3\) in two and was left out/);
   const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
   assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [0, 2000, 4000, 6000, 8000]);
+});
+
+test("empty bars at the end: kept out only when every track is silent there and a video stops at the last note", () => {
+  const noteBar = () => bar([beat(1, [note(3, 1)])]);
+  const bars = (n, upTo, extra = {}) => Array.from({ length: n }, (_, i) => (i < upTo ? noteBar() : restBar(i === extra.at ? extra.fields : {})));
+  const played = (n) => Array.from({ length: n }, (_, bar) => ({ bar, occurrence: 0 }));
+  const gtr = { measures: bars(8, 3) }, bass = { measures: bars(8, 5) };
+  // the last note on any track is in bar 5: a video with 5 points fits once bars 6-8 are left out
+  assert.equal(emptyTail([gtr, bass], played(8), [video(evenPoints(5))]), 5);
+  assert.equal(emptyTail([gtr], played(8), [video(evenPoints(3))]), 3); // the caller passes every track with notes
+  // no video stops there, or a video stops at the guitar's last note while the bass plays on: refused
+  assert.equal(emptyTail([gtr, bass], played(8), [video(evenPoints(4)), video(evenPoints(3))]), null);
+  // notes up to the last bar: nothing to leave out
+  assert.equal(emptyTail([{ measures: bars(8, 8) }], played(8), [video(evenPoints(8))]), null);
+  // a repeat or an alternate ending among the empty bars: refused (they'd change the played bars)
+  assert.equal(emptyTail([{ measures: bars(8, 5, { at: 6, fields: { repeat: 2 } }) }], played(8), [video(evenPoints(5))]), null);
+  assert.equal(emptyTail([{ measures: bars(8, 5, { at: 5, fields: { repeatStart: true } }) }], played(8), [video(evenPoints(5))]), null);
+  // the empty bars must be the last ones played, once each
+  const repeated = [...played(8), { bar: 6, occurrence: 1 }, { bar: 7, occurrence: 1 }];
+  assert.equal(emptyTail([bass], repeated, [video(evenPoints(7))]), null);
+});
+
+test("convert: empty bars after the videos' last point are left out, decided on every track", async () => {
+  const noteBar = () => bar([beat(1, [note(3, 1)])]);
+  const gtr = track([noteBar(), noteBar(), restBar(), restBar(), restBar(), restBar()], { name: "Gtr", instrumentId: 30, tuning: [64, 59, 55, 50, 45, 40] });
+  const bass = track([noteBar(), noteBar(), noteBar(), noteBar(), restBar(), restBar()]);
+  const b = bundle([gtr, bass], [video(evenPoints(4), { videoId: "four" }), video(evenPoints(2), { videoId: "two" })]);
+  const info = await inspectSongsterr(b, { tracks: [0] }); // only the guitar chosen: the bass still counts
+  assert.equal(info.emptyBarsLeftOut, 2);
+  assert.deepEqual(info.videos.map((v) => [v.videoId, v.fit]), [["four", "played"], ["two", null]]);
+  assert.equal(info.data[0].data.measures.length, 6); // the tabs as loaded stay whole (the web app keeps them)
+  const warnings = [];
+  const r = await convertSongsterr(b, { tracks: [0], audio: null, onWarning: (w) => warnings.push(w) });
+  assert.equal(r.report.bars, 4);
+  assert.equal(r.report.emptyBarsLeftOut, 2);
+  assert.equal(r.report.video.videoId, "four");
+  assert.equal(r.report.syncPoints, 5);
+  assert.match(warnings.join("\n"), /last 2 bars are rests on every track.*left out \(the file ends at bar 4\)/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.equal(back.masterBars.length, 4);
+  assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [0, 2000, 4000, 6000]);
+  // a video that fits the whole tab wins: nothing is left out
+  const whole = await inspectSongsterr(bundle([gtr, bass], [video(evenPoints(6)), video(evenPoints(4))]));
+  assert.equal(whole.emptyBarsLeftOut, 0);
+  assert.equal(whole.score.masterBars.length, 6);
 });
 
 test("convert: no video fits → the tab still converts without a recording (no sync points), never with one", async () => {

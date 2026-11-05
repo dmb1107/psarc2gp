@@ -225,6 +225,13 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     a track can't have none, so it gets the clarinet (the user's own GP8 vocal track uses it); vocal tracks
     are always written muted, even without a recording (the user asked for silent vocals, 2026-11-05).
     Ticked by default, like every track (the user's choice, 2026-11-05; it was guitars and basses only).
+23. **Empty bars at the end are left out when the videos' sync stops before them** (the user's decision,
+    2026-11-05). Kerosene! (s676767): 102 bars, the last note on any track in bar 80, and all five videos,
+    listed for this revision, have 80 points at a steady 131 bpm; Songsterr plays them in sync. When no
+    video fits the whole tab, the bars after the last note on *every* track of the song (not only the
+    chosen ones) are left out if they hold no repeat or ending and a video has exactly one point per
+    played bar before them (`emptyTail` in sync.js). Every bar in the file still gets its own point; the
+    form and the report say how many bars were left out. "No recording" leaves them out too (rests only).
 
 ## Observations from real use
 

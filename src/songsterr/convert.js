@@ -1,9 +1,9 @@
 // Songsterr bundle (+ audio) -> Guitar Pro 8 (.gp) with a sync point on every played bar.
 // Runs in Node and in browsers, like src/convert.js: bundle and bytes in, bytes out.
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
-import { validateBundle, loadTracks, defaultTrackIndices, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
+import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
-import { playedBars, chooseVideo, describeVideos, fitVideos, syncFromPoints } from "./sync.js";
+import { playedBars, chooseVideo, describeVideos, fitVideos, emptyTail, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
 import { rewriteZipEntry } from "../gp/zip.js";
 import { syncPointsInPlayOrder } from "../gp/syncpoints.js";
@@ -25,24 +25,36 @@ function loadScore(tex) {
 export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = () => {} } = {}) {
   validateBundle(bundle);
   const indices = tracks ?? defaultTrackIndices(bundle);
-  if (!indices.length) {
-    const others = bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty);
-    throw new Error("this song has no guitar or bass track" + (others.length
-      ? `; choose tracks by number (--tracks): ${others.map(({ t, i }) => `${i} ${t.name} (${t.instrument ?? `instrument ${t.instrumentId}`})`).join(", ")}`
-      : ""));
-  }
+  if (!indices.length) throw new Error(tracks ? "no tracks chosen" : "all of this song's tracks are empty");
   const data = await loadTracks(bundle, indices, { fetch });
-  const built = buildAlphaTex(bundle, data, { warn });
-  const { score, settings } = loadScore(built.tex);
-  const played = playedBars(alphaTab, score, settings);
-  const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
-  // fitted: the videos with their fit, stray points left out (sync.js fitVideos); videos: their summary
-  const fitted = fitVideos(bundle.videos, quarters, score.masterBars.length);
-  return { data, built, score, settings, played, fitted, videos: describeVideos(fitted, played.length, score.masterBars.length) };
+  const structure = (tracks) => {
+    const built = buildAlphaTex(bundle, tracks, { warn });
+    const { score, settings } = loadScore(built.tex);
+    const played = playedBars(alphaTab, score, settings);
+    const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
+    // fitted: the videos with their fit, stray points left out (sync.js fitVideos)
+    return { built, score, settings, played, fitted: fitVideos(bundle.videos, quarters, score.masterBars.length) };
+  };
+  let kept = data, emptyBarsLeftOut = 0;
+  let r = structure(data);
+  if (!r.fitted.some((v) => v.fit)) {
+    // no video fits the whole tab: maybe its sync stops at the last note, before empty bars (sync.js
+    // emptyTail). Which bars are empty is decided on every track with notes, not only the chosen ones.
+    const all = await loadTracks(bundle, convertibleTrackIndices(bundle), { fetch });
+    const keep = emptyTail(all.map((d) => d.data), r.played, bundle.videos);
+    if (keep !== null) {
+      emptyBarsLeftOut = r.score.masterBars.length - keep;
+      kept = data.map((d) => ({ ...d, data: { ...d.data, measures: d.data.measures.slice(0, keep) } }));
+      r = structure(kept);
+    }
+  }
+  const { built, score, settings, played, fitted } = r;
+  // data: the tabs as loaded (the web app keeps them); kept: what the score is built from
+  return { data, kept, emptyBarsLeftOut, built, score, settings, played, fitted, videos: describeVideos(fitted, played.length, score.masterBars.length) };
 }
 
 // Options:
-//   tracks     track indices (default: every guitar and bass track)
+//   tracks     track indices (default: every track with notes)
 //   video      "default" | "backing" | "solo" | "playthrough" | "alternative" | a YouTube video id
 //   audio      { bytes, format: "mp3" | "m4a", seconds, provider, offsetMs } or null (no audio track; then a tab
 //              that no video fits still converts, without sync points), or an
@@ -53,8 +65,9 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
 export async function convertSongsterr(bundle, { tracks = null, video = "default", audio = null, rse = true, mute = true, fetch, onWarning = () => {} } = {}) {
   const warnings = [];
   const warn = (m) => { warnings.push(m); onWarning(m); };
-  const { built, score, settings, played, fitted } = await inspectSongsterr(bundle, { tracks, fetch, warn });
+  const { built, score, settings, played, fitted, emptyBarsLeftOut } = await inspectSongsterr(bundle, { tracks, fetch, warn });
   const written = score.masterBars.length;
+  if (emptyBarsLeftOut) warn(`the tab's last ${emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them: they were left out (the file ends at bar ${written})`);
   let chosen = null;
   try {
     chosen = chooseVideo(fitted, video, played.length, written);
@@ -105,6 +118,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     report: {
       bars: written,
       playedBars: played.length,
+      emptyBarsLeftOut,
       syncPoints: sync?.flat.length ?? 0,
       video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null },
       audioSeconds: audio?.seconds ?? null,

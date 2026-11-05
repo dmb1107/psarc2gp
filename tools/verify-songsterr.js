@@ -45,18 +45,24 @@ export async function verifySongsterr(bundle, { video = "default", allVideos = f
   const problems = [];
   const notes = [];
   const r = await convertSongsterr(bundle, { tracks, video, fetch });
-  const { data, played, score: texScore, fitted } = await inspectSongsterr(bundle, { tracks, fetch });
+  const { data, kept, emptyBarsLeftOut, played, score: texScore, fitted } = await inspectSongsterr(bundle, { tracks, fetch });
+  if (emptyBarsLeftOut) {
+    // independent of the converter's check: the bars left out hold no note on any converted track
+    const lost = data.flatMap((d) => d.data.measures.slice(texScore.masterBars.length).flatMap((m) => m.voices ?? [])
+      .flatMap((v) => v.beats ?? []).filter((b) => !b.rest && b.notes?.some((n) => !n.rest)).map(() => d.meta.name));
+    if (lost.length) problems.push(`${lost.length} note(s) in the ${emptyBarsLeftOut} bars left out at the end (first on ${lost[0]})`);
+  }
   const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
   if (back.masterBars.length !== r.report.bars) problems.push(`the .gp has ${back.masterBars.length} bars, the tab ${r.report.bars}`);
 
   // ---- bars and notes, per track
   const trackResults = r.report.tracks.map((t, ti) => {
-    const c = checkNotes(data.find((d) => d.index === t.index).data, back.tracks[ti], back.masterBars);
+    const c = checkNotes(kept.find((d) => d.index === t.index).data, back.tracks[ti], back.masterBars);
     if (c.incompleteBars) problems.push(`${t.name}: ${c.incompleteBars} incomplete bar(s)`);
     if (c.notFound) problems.push(`${t.name}: ${c.notFound} note(s) not found (first: ${c.missing[0]})`);
     if (c.extra) problems.push(`${t.name}: ${c.extra} note(s) not in the tab (first: ${c.extras[0]})`);
     if (t.kind !== "vocals") return { track: t.name, ...c };
-    const l = checkLyrics(data.find((d) => d.index === t.index).data, back.tracks[ti]);
+    const l = checkLyrics(kept.find((d) => d.index === t.index).data, back.tracks[ti]);
     if (l.wrong) problems.push(`${t.name}: ${l.wrong} syllable(s) missing or misplaced (first: ${l.first})`);
     return { track: t.name, ...c, syllables: l.syllables, lyricsWrong: l.wrong };
   });
@@ -64,7 +70,7 @@ export async function verifySongsterr(bundle, { video = "default", allVideos = f
   const s = bundle.song;
   const result = (rest) => ({
     title: `${s.artist} - ${s.title}`, revision: s.revisionId, bars: r.report.bars, playedBars: played.length,
-    tracks: trackResults, warnings: r.report.warnings, problems, notes, ...rest,
+    emptyBarsLeftOut, tracks: trackResults, warnings: r.report.warnings, problems, notes, ...rest,
   });
   if (!r.report.video) {
     problems.push(`no video fits this revision (${played.length} played bars; the videos have ${[...new Set(bundle.videos.map((v) => v.points.length))].sort((a, b) => a - b).join(", ")} points): nothing to sync`);
@@ -266,7 +272,7 @@ if (process.argv[1] && process.argv[1].endsWith("verify-songsterr.js")) {
     }
     r.file = f;
     results.push(r);
-    console.log(`${r.title} (revision ${r.revision}): ${r.bars} bars, ${r.playedBars} played, ${r.syncPoints} sync points${r.video ? `, video ${r.video}` : ""}`);
+    console.log(`${r.title} (revision ${r.revision}): ${r.bars} bars${r.emptyBarsLeftOut ? ` (${r.emptyBarsLeftOut} empty ones at the end left out)` : ""}, ${r.playedBars} played, ${r.syncPoints} sync points${r.video ? `, video ${r.video}` : ""}`);
     for (const t of r.tracks) console.log(`   ${t.track.padEnd(22)} bars ${t.bars} incomplete ${t.incompleteBars}  notes ${t.notes} not found ${t.notFound} extra ${t.extra}${t.syllables != null ? `  syllables ${t.syllables} misplaced ${t.lyricsWrong}` : ""}`);
     for (const t of r.tempo) console.log(`   ${t.chosen ? "*" : " "} tempo ${t.videoId} ${t.feature.padEnd(11)}${t.strayPoint != null ? ` (point ${t.strayPoint + 1} left out)` : ""} video/tab ${pct(t.median).padStart(4)}  bad points ${t.outliers}  implausible ${t.implausible}  uneven ${t.uneven}/${t.bars}`);
     for (const w of r.warnings) console.log(`   warning: ${w}`);

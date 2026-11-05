@@ -98,6 +98,14 @@ changes.
    sync.js). The point is left out with a warning, the form says "one stray sync point left out"; nothing
    is stretched. Come As You Are then syncs at 100% of the tab's tempo with no uneven bar. Any other count
    is still refused; then "No recording" (CLI `--no-audio`) converts the tab without sync points.
+   **Sync stops at the last note.** Kerosene! (s676767, revision 3874585): 102 bars, no repeats, notes up
+   to bar 80 on every track (drums, organ and clean guitar stop at bar 48), then 22 bars of rests; all five
+   videos (default, two alternatives, two backing) are listed for this revision with 80 points at a steady
+   ~131 bpm (100% of the tab's tempo). **Handled (the user's decision, 2026-11-05):** when no video fits
+   the whole tab, the empty bars after the last note on every track are left out of the file if they hold
+   no repeat or alternate ending, are played once each at the end, and a video then has one point per
+   played bar (`emptyTail` in sync.js; inspectSongsterr loads every track with notes to decide). Checked:
+   verify-songsterr finds every note of all five tracks, 81 sync points, every video at 100%.
 4. **Points can be negative** (a video that starts after the tab's beginning: one alternative starts at
    −12.64 s), which means a positive `FramePadding`.
 5. **Songsterr's API refuses automated clients.** After about a dozen scripted requests, `api/meta`

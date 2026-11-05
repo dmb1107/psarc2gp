@@ -58,6 +58,31 @@ export function findStrayPoint(points, quarters) {
   return found.length === 1 ? found[0] : null;
 }
 
+// Empty bars at the end: Songsterr's sync stops at the last bar with a note, so a tab ending in bars of
+// rests on every track has videos with one point per played bar up to there (Kerosene!, s676767: 102
+// bars, notes up to bar 80 on every track, all five videos 80 points). Returns the number of written
+// bars to keep, or null. Only when the evidence is unambiguous: the tracks given are all the song's
+// tracks with notes (the caller loads them), the bars after the last note are empty on every one, hold
+// no repeat or alternate ending, and are played once each at the very end; and a video has exactly one
+// point per played bar before them. The bars left out are rests only; nothing is stretched.
+//   tracks: track JSON of every track with notes; played: playback order of the whole tab
+export function emptyTail(tracks, played, videos) {
+  const written = tracks[0]?.measures.length ?? 0;
+  const hasNote = (m) => m.voices?.some((v) => v.beats?.some((b) => !b.rest && b.notes?.some((n) => !n.rest)));
+  let last = -1;
+  for (const t of tracks) for (let i = t.measures.length - 1; i > last; i--) if (hasNote(t.measures[i])) { last = i; break; }
+  const keep = last + 1;
+  if (keep < 1 || keep >= written) return null;
+  const structural = (m) => m.repeatStart || m.repeat || m.alternateEnding !== undefined;
+  if (tracks.some((t) => t.measures.slice(keep).some(structural))) return null;
+  const tail = written - keep;
+  const end = played.slice(-tail);
+  if (played.length <= tail || end.some((p, k) => p.bar !== keep + k || p.occurrence !== 0)) return null;
+  if (played.slice(0, -tail).some((p) => p.bar >= keep)) return null;
+  const want = played.length - tail;
+  return videos.some((v) => pointCount(v) === want) ? keep : null;
+}
+
 // The videos with their fit; a video with one stray point (findStrayPoint) fits with that point left
 // out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }.
 export function fitVideos(videos, quarters, writtenCount) {

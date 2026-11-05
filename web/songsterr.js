@@ -298,7 +298,8 @@ function renderSong() {
   const { song } = c.bundle;
   $("ss-title").textContent = `${song.artist} – ${song.title}`;
   $("ss-byline").textContent = `Songsterr song ${song.songId}, revision ${song.revisionId}` +
-    (c.from === "file" ? " · from a saved file" : "") + (c.info ? ` · ${c.info.bars} bars, ${c.info.playedBars} played with repeats` : "");
+    (c.from === "file" ? " · from a saved file" : "") + (c.info ? ` · ${c.info.bars} bars, ${c.info.playedBars} played with repeats` +
+      (c.info.emptyBarsLeftOut ? ` (and ${c.info.emptyBarsLeftOut} empty bars at the end, left out)` : "") : "");
 
   const defaults = new Set(defaultTrackIndices(c.bundle));
   if (tracksShownFor !== c) $("ss-tracks").replaceChildren(...song.tracks.map((t, i) => {
@@ -349,7 +350,8 @@ function renderVideos() {
   const others = c.info.videos.length - usable.length;
   $("ss-video-note").textContent = !usable.length
     ? `None of the ${c.info.videos.length} videos fits this revision of the tab (they were synced to another one), so the recording can't be synced. Choose "No recording" to convert the tab on its own, or try another revision on Songsterr.`
-    : others ? `${others} other video${others === 1 ? " was" : "s were"} synced to another revision of the tab and can't be used.` : "";
+    : [c.info.emptyBarsLeftOut && `The tab's last ${c.info.emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them, so they're left out of the file.`,
+      others && `${others} other video${others === 1 ? " was" : "s were"} synced to another revision of the tab and can't be used.`].filter(Boolean).join(" ");
 }
 
 function renderAudio() {

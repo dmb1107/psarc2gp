@@ -41,8 +41,8 @@ function fromGp(bytes, fileName) {
 // The tracks' tabs come back with the answer, so the page keeps them and nothing is fetched twice.
 async function inspect({ bundle, tracks }) {
   const { inspectSongsterr } = await songsterr;
-  const { data, played, score, videos } = await inspectSongsterr(bundle, { tracks });
-  return { bars: score.masterBars.length, playedBars: played.length, videos, trackData: data.map((d) => ({ index: d.index, data: d.data })) };
+  const { data, played, score, videos, emptyBarsLeftOut } = await inspectSongsterr(bundle, { tracks });
+  return { bars: score.masterBars.length, playedBars: played.length, emptyBarsLeftOut, videos, trackData: data.map((d) => ({ index: d.index, data: d.data })) };
 }
 
 async function fromSongsterr({ bundle, tracks, video, audio: choice, file, secrets, nudge = 0 }, progress) {

@@ -181,9 +181,10 @@ async function convertBundle(file) {
   try { bundle = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { throw new Error(`not JSON (${e.message})`); }
   validateBundle(bundle);
   if (opts.listVideos) {
-    const { videos, played, score, data } = await inspectSongsterr(bundle, { tracks: opts.tracks });
+    const { videos, played, score, data, emptyBarsLeftOut } = await inspectSongsterr(bundle, { tracks: opts.tracks });
     log(`${name}: ${bundle.song.artist} - ${bundle.song.title}, revision ${bundle.song.revisionId}`);
     log(`    ${score.masterBars.length} bars, ${played.length} played (repeats included)`);
+    if (emptyBarsLeftOut) log(`    the last ${emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them: left out`);
     log("    tracks:");
     bundle.song.tracks.forEach((t, i) => log(`      ${String(i).padStart(2)}  ${t.name}${data.some((d) => d.index === i) ? (opts.tracks ? "  (chosen)" : "  (converted by default)") : ""}`));
     log("    videos:");
