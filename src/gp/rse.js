@@ -37,6 +37,13 @@ export const SOUNDS = {
     ["M07_DynamicClassicDynamic", "0.5 0.23333 0.6142"],
     ["M04_StudioReverbRoomAmbience", "1 0.43 0.4 0.5 0.2"],
   ]),
+  // vocal melodies (Songsterr vocal tracks): Guitar Pro has no voice sound; the user's own GP8 file with a
+  // vocal line ("Voice - Clarinet", Mac DeMarco - Salad Days) plays it on this clarinet, at concert pitch
+  voice: sound("Clarinet", "Orchestra/Winds/Clarinet", 71, "Clarinet-Solo", 0, [
+    ["M08_GraphicEQ10Band", "0 0 0.625 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5"],
+    ["M07_DynamicClassicDynamic", "0.5 0.19523 0.42378"],
+    ["M04_StudioReverbRoomAmbience", "1 0.29523 0.4 0.5 0.2"],
+  ]),
   // Guitar Pro 7's own drum kit (alphaTab's test-data/guitarpro7/drum-tabs.gp). The kit's pieces and their
   // RSE samples come from the track's InstrumentSet, which alphaTab writes for percussion tracks.
   drums: sound("Drums", "Drums/Drums/Drumkit", 0, "Drumkit-Master", 0, [

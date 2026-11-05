@@ -34,6 +34,7 @@ export function soundFor(meta) {
   const kind = trackKind(meta);
   if (kind === "bass") return "bass";
   if (kind === "drums") return "drums";
+  if (kind === "vocals") return "voice";
   const p = meta.instrumentId;
   if (p === 30) return "distortion";
   if (p === 29) return "overdrive";
@@ -210,8 +211,9 @@ const BEAT_FIELDS = new Set(["notes", "type", "duration", "dots", "tuplet", "tup
   "wahwah", "vibrato", "vibratoWithTremoloBar", "chord"]);
 const DYNAMICS = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"]);
 
-function beatTex(beat, noteOf, stats, where, state) {
+function beatTex(beat, noteOf, stats, where, state, extra = []) {
   const { dur, eff } = valueOf(beat, where);
+  eff.push(...extra);
   if (beat.graceNote) eff.push(beat.graceNote === "onBeat" ? "gr ob" : "gr bb");
   if (beat.velocity && DYNAMICS.has(beat.velocity) && beat.velocity !== state.dynamics) {
     eff.push(`dy ${beat.velocity}`);
@@ -244,6 +246,83 @@ function beatTex(beat, noteOf, stats, where, state) {
   return `${notes.length === 1 ? notes[0] : `(${notes.join(" ")})`}.${dur}${effTex}`;
 }
 
+// Lyrics. Songsterr keeps a track's lyrics as Guitar Pro does: up to 5 lines (`newLyrics`), each a text
+// and the bar it starts on (`offset`, 1 = the first bar). Spaces and line breaks separate words, a dash
+// ends a syllable ("ne-ver"), "+" joins words under one note, [..] is a comment. The syllables go on the
+// notes of the first voice in order, skipping rests and tied notes. Two spaces in a row leave a note
+// without a syllable; that empty syllable may fall on a tied note. Checked against Songsterr's own page
+// (2026-11-05): every syllable on the same note in Enter Sandman (303) and Come As You Are (232).
+//
+// lyricChunks splits a text into syllables exactly like alphaTab 1.8.4's Lyrics.finish(false) (one entry
+// per note, "" for a note left empty; test/songsterr.test.js compares the two). alphaTab's own placement
+// (Track.applyLyrics) doesn't skip tied notes, so the syllables are placed here and written per beat.
+export function lyricChunks(text) {
+  const chunks = [];
+  const add = (s) => {
+    s = s.split("+").join(" ");
+    chunks.push(s.replace(/_+$/, ""));
+  };
+  const str = String(text ?? "");
+  // states: 0 between words, 1 word start, 2 in a word, 3 in a [comment], 4 after a dash
+  let state = 1, skipSpace = false, start = 0, p = 0;
+  while (p < str.length) {
+    const c = str[p];
+    if (state === 0) {
+      if (c === " " ? !skipSpace : c !== "\n" && c !== "\r" && c !== "\t") { if (c !== " ") skipSpace = false; state = 1; continue; }
+    } else if (state === 1) {
+      if (c === "[") state = 3;
+      else { start = p; state = 2; continue; }
+    } else if (state === 3) {
+      if (c === "]") state = 1;
+    } else if (state === 2) {
+      if (c === "-") state = 4;
+      else if (c === " " || c === "\n" || c === "\r") { add(str.slice(start, p)); state = 0; }
+    } else if (state === 4 && c !== "-") {
+      add(str.slice(start, p));
+      skipSpace = true;
+      state = 0;
+      continue;
+    }
+    p++;
+  }
+  if (state === 2 && p !== start) add(str.slice(start, p));
+  return chunks;
+}
+
+// The syllable of each beat of the first voice: Map "bar/beat" → [line 0 text, line 1 text, …]
+export function placeLyrics(lines, measures) {
+  const placed = new Map();
+  const used = [];
+  (lines ?? []).forEach((line, li) => {
+    const chunks = lyricChunks(line?.text);
+    if (!chunks.some(Boolean)) return;
+    const row = Number.isInteger(line.line) && line.line >= 1 && line.line <= 5 ? line.line - 1 : li;
+    let c = 0;
+    const from = Math.max(0, (Number.isInteger(line.offset) ? line.offset : 1) - 1);
+    for (let mi = from; mi < measures.length && c < chunks.length; mi++) {
+      for (const [bi, b] of (measures[mi].voices?.[0]?.beats ?? []).entries()) {
+        if (c >= chunks.length) break;
+        const notes = (b.notes ?? []).filter((n) => !n.rest);
+        if (b.rest || !notes.length) continue;
+        if (notes.every((n) => n.tie) && chunks[c] !== "") continue;
+        const s = chunks[c++];
+        if (!s) continue;
+        const k = `${mi}/${bi}`;
+        if (!placed.has(k)) placed.set(k, []);
+        placed.get(k)[row] = s;
+      }
+    }
+    used.push({ row, syllables: chunks.filter(Boolean).length, placed: chunks.slice(0, c).filter(Boolean).length });
+  });
+  return { placed, lines: used };
+}
+
+const lyricsTex = (rows) => {
+  const out = [];
+  rows.forEach((s, row) => { if (s) out.push(rows.length === 1 && row === 0 ? `lyrics ${q(s)}` : `lyrics ${row} ${q(s)}`); });
+  return out;
+};
+
 // exact bar length check (grace notes take no time, as in Guitar Pro)
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
 function addFrac([a, b], [c, d]) { const n = a * d + c * b, m = b * d, g = gcd(n, m) || 1; return [n / g, m / g]; }
@@ -261,8 +340,8 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
   const names = new Map();
   tracks.forEach((t, ti) => {
     const kind = trackKind(t.meta);
-    if (kind === "vocals") throw new Error(`${t.meta.name}: vocals aren't converted yet`);
     const drums = kind === "drums";
+    const vocals = kind === "vocals";
     const tuning = drums ? [] : t.data.tuning ?? t.meta.tuning;
     if (!drums && (!Array.isArray(tuning) || !tuning.length)) throw new Error(`${t.meta.name}: no tuning`);
     const nStrings = tuning.length;
@@ -276,10 +355,15 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
     // drums: a percussion staff (no tab); the articulation names are declared once the notes are known
     const articulationLine = drums ? lines.push("\\staff {score}", "\\instrument percussion", "") - 1 : -1;
     if (!drums) {
-      lines.push("\\staff {score tabs}");
+      // vocals: notation only (Songsterr stores them as frets on a made-up tuning; the pitches are what
+      // counts), played by a clarinet as in Guitar Pro's own vocal tracks (src/gp/rse.js "voice")
+      lines.push(vocals ? "\\staff {score}" : "\\staff {score tabs}");
       lines.push(`\\tuning (${tuning.map(pitchName).join(" ")})`);
-      lines.push(`\\instrument ${Math.max(0, Math.min(127, t.meta.instrumentId ?? 27))}`);
+      lines.push(`\\instrument ${vocals ? SOUNDS_PROGRAM_VOICE : Math.max(0, Math.min(127, t.meta.instrumentId ?? 27))}`);
     }
+    const lyrics = vocals ? placeLyrics(t.data.newLyrics, t.data.measures) : null;
+    // a low voice (a man's) is written in the treble clef an octave up, with the 8 below the clef
+    const lowVoice = vocals && medianPitch(t.data.measures, tuning) < 60;
     if (kind === "guitar" || kind === "bass") lines.push("\\displaytranspose 12");
     const capo = drums ? 0 : t.data.capo ?? t.meta.capo;
     if (capo > 0) lines.push(`\\capo ${capo}`);
@@ -298,6 +382,7 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
           if (clef) meta.push(`\\clef ${clef}`);
           else if (mi === 0 && kind === "bass") meta.push("\\clef bass");
           else if (mi === 0 && drums) meta.push("\\clef neutral"); // alphaTab gives a percussion staff a treble clef
+          else if (mi === 0 && lowVoice) meta.push("\\clef G2 \\ottava 8vb");
           if (ti === 0) {
             if (mi === 0 && bars.anacrusis) meta.push("\\ac");
             if (bar.tsChange) meta.push(`\\ts (${bar.num} ${bar.den})`);
@@ -318,7 +403,8 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
         let len = [0, 1];
         for (const [bi, b] of (voice?.beats ?? []).entries()) {
           const noteOf = drums ? (n) => drumNoteTex(n, stats, usedDrums) : (n) => noteTex(n, b, nStrings, stats);
-          const tex = beatTex(b, noteOf, stats, `${name}, bar ${mi + 1}, beat ${bi + 1}`, state);
+          const words = vi === 0 && lyrics?.placed.get(`${mi}/${bi}`);
+          const tex = beatTex(b, noteOf, stats, `${name}, bar ${mi + 1}, beat ${bi + 1}`, state, words ? lyricsTex(words) : []);
           if (tex) beats.push(tex);
           if (!b.graceNote && Array.isArray(b.duration)) len = addFrac(len, b.duration);
         }
@@ -341,12 +427,27 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
     if (stats.badBars.length) warn(`${name}: ${stats.badBars.length} bar(s) don't add up to their time signature (bar ${stats.badBars.slice(0, 5).join(", ")})`);
     if (stats.skippedNotes) warn(`${name}: ${stats.skippedNotes} note(s) on strings the tuning doesn't have were left out`);
     if (stats.unsupported.size) warn(`${name}: not converted: ${[...stats.unsupported].join(", ")}`);
+    for (const l of lyrics?.lines ?? []) {
+      if (l.placed < l.syllables) warn(`${name}: lyrics line ${l.row + 1} has ${l.syllables - l.placed} syllable(s) more than the notes after its start; left out`);
+    }
     reports.push({
       name, kind, index: t.index, notes: stats.notes, graceNotes: stats.graceNotes, sound,
+      ...(lyrics && { syllables: lyrics.lines.reduce((a, l) => a + l.placed, 0) }),
       tuning: drums ? "" : [...tuning].reverse().map(pitchName).join(" "), // lowest first, as psarc reports it
     });
   });
   return { tex: lines.join("\n") + "\n", bars, tracks: reports };
+}
+
+const SOUNDS_PROGRAM_VOICE = 71; // General MIDI clarinet, the program of rse.js's "voice" sound
+
+// the middle pitch of a stringed track's notes (MIDI number), or Infinity with no notes
+function medianPitch(measures, tuning) {
+  const p = [];
+  for (const m of measures) for (const v of m.voices ?? []) for (const b of v.beats ?? []) {
+    for (const n of b.notes ?? []) if (!n.rest && tuning[n.string] !== undefined) p.push(tuning[n.string] + (n.fret ?? 0));
+  }
+  return p.length ? p.sort((a, b) => a - b)[p.length >> 1] : Infinity;
 }
 
 // a rest filling a bar of num/den (whole-bar rests in common meters, otherwise a run of den-notes)

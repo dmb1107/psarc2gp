@@ -1,11 +1,11 @@
 // tools/verify-songsterr.js: its checks pass on a clean conversion and catch what they're for
-// (a lost note, a half-time video, a bad point). Real bundles in .samples/songsterr/ are checked when present.
+// (a lost note, a moved syllable, a half-time video, a bad point). Real bundles in .samples/songsterr/ are checked when present.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { verifySongsterr, checkNotes, tempoCheck, writtenSeconds } from "../tools/verify-songsterr.js";
+import { verifySongsterr, checkNotes, checkLyrics, tempoCheck, writtenSeconds } from "../tools/verify-songsterr.js";
 import { convertSongsterr, inspectSongsterr } from "../src/songsterr/convert.js";
 
 const require = createRequire(import.meta.url);
@@ -65,6 +65,21 @@ test("a note lost or moved in the .gp is reported", async () => {
   assert.equal(c.notFound, 1);
   assert.equal(c.extra, 1);
   assert.match(c.missing[0], /bar 1 tick 0 string 1 fret 3/);
+});
+
+test("vocals: a syllable missing or on the wrong note in the .gp is reported", async () => {
+  const b = song();
+  Object.assign(b.song.tracks[0], { name: "Vox", isVocalTrack: true, isGuitar: false });
+  b.trackData[0].newLyrics = [{ line: 1, offset: 1, text: "one two-three four five six seven eight" }];
+  const r = await verifySongsterr(b);
+  assert.deepEqual(r.problems, []);
+  assert.equal(r.tracks[0].syllables, 8); // the tied note in bar 3 gets none
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes((await convertSongsterr(b, { tracks: [0] })).gp, new alphaTab.Settings());
+  const beats = back.tracks[0].staves[0].bars[0].voices[0].beats;
+  [beats[1].lyrics, beats[2].lyrics] = [beats[2].lyrics, beats[1].lyrics];
+  const c = checkLyrics(b.trackData[0], back.tracks[0]);
+  assert.equal(c.wrong, 4);
+  assert.match(c.first, /bar 1 tick 960 line 1 "two-"/);
 });
 
 test("a half-time video and a bad point are problems for the video the .gp uses", async () => {

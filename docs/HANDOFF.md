@@ -194,7 +194,14 @@ Pro's RSE drum kit; every drum note of the three songs with drums found by verif
 with alphaTab; heard in time in Guitar Pro 8 (Enter Sandman, fetched audio, from the web app). A test
 with an MP3 from elsewhere sounded off by 20 ms: that file's own offset (SONGSTERR.md step 6).
 
-Not done: vocals, D.S./D.C./coda jumps (no tab with one found yet), the provider's error answers
+Vocals (2026-11-05): vocal tracks convert (on request) to a notation-only staff with the lyrics, placed
+by Songsterr's own rule (tied notes skipped; two spaces leave a note empty, and that empty syllable may
+fall on a tied note), checked against Songsterr's page: all 303 syllables of Enter Sandman and 232 of
+Come As You Are on the same notes. Guitar Pro's clarinet RSE sound (as in the user's own GP8 vocal
+track), always muted (the user's choice). verify-songsterr checks every syllable; rendered with alphaTab.
+Seen in Guitar Pro 8 by the user (Come As You Are with the fetched recording): "looks good".
+
+Not done: D.S./D.C./coda jumps (no tab with one found yet), the provider's error answers
 (401/403/429) with the real service, per-song automatic offset.
 
 ## Library sweep (2026-10-25)
@@ -308,7 +315,7 @@ In rough priority order; these are outcomes, not implementation plans.
    look at the two outlier bass tracks. Measure with `tools/sweep.js`.
 4. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
-5. **Lyrics / vocal melody track**; for Songsterr, **vocals** (drums are done), then jumps when a tab with one
+5. **Lyrics / vocal melody track** for psarc; for Songsterr (vocals done), jumps when a tab with one
    turns up (SONGSTERR.md, "Order of work").
 6. Remaining techniques: strum direction, let-ring, fingering.
 7. **Web app:** have the friends try the hosted site (Firefox, Safari, Mac); then let the Explorer

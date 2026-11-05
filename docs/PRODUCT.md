@@ -77,7 +77,7 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 ### Later (not started; ordering is a suggestion)
 
 - Lyrics / vocal melody track (every test chart has timed, pitched lyrics)
-- Songsterr vocals (notation with lyrics); D.S./D.C./coda jumps once a real tab with one turns up
+- Songsterr D.S./D.C./coda jumps once a real tab with one turns up (vocals are built: notation with lyrics)
 - Songsterr sync measured against the audio, per song (the points' lag varies by video, 20–110 ms on four
   songs; `--nudge` corrects one song by ear today)
 - Strum direction, let-ring, left-hand fingering
@@ -219,6 +219,12 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     measured songs fine by ear, Enter Sandman's drums included (fetched audio, 2026-11-05). `--nudge <ms>`
     corrects one song; measuring each song needs a decoder the converter doesn't have in Node, and isn't
     worth building until a song needs it.
+22. **Songsterr vocals: notation with lyrics, silent.** A notation-only staff (Songsterr stores vocals as
+    frets on a made-up tuning; only the pitches matter) with the lyrics placed by Songsterr's own rule,
+    written per beat (alphaTab's own placement doesn't skip tied notes). Guitar Pro has no voice sound and
+    a track can't have none, so it gets the clarinet (the user's own GP8 vocal track uses it); vocal tracks
+    are always written muted, even without a recording (the user asked for silent vocals, 2026-11-05).
+    Offered, not ticked by default, like drums.
 
 ## Observations from real use
 

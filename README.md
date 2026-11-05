@@ -106,7 +106,9 @@ YouTube video.
 - Sync is per bar, not per beat: Songsterr times bars, not beats. A video Songsterr timed for another
   version of the tab doesn't fit and isn't offered; it's never stretched to fit. If no video fits, the
   tab still converts, without a recording.
-- Drum tracks become Guitar Pro drum notation with its RSE drum kit. Vocals aren't converted yet.
+- Drum tracks become Guitar Pro drum notation with its RSE drum kit. Vocal tracks become a notation staff
+  with the lyrics under the notes, kept silent (unmute one in Guitar Pro to hear the melody on a clarinet).
+  Drums and vocals are offered but not ticked by default.
 - The bookmark doesn't work in Safari (Songsterr's own page refused to load there in testing).
 
 ### Browsers
@@ -269,8 +271,10 @@ changes, sections, repeats and alternate endings, pickup bars, triplet feel, tie
 pull-offs, bends, vibrato, palm mutes, let ring, dead and ghost notes, accents, staccato, harmonics, grace
 notes, tremolo bar, wah, strokes, and the tuning and key. Drum tracks become a percussion staff (each
 Songsterr drum note is a Guitar Pro drum articulation already: kick, snare, rim shot, hi-hat closed,
-half-open and open, toms, crashes, ride, …) with accents and ghost notes. Not yet: vocals, and
-D.S./D.C./coda jumps (a tab with one stops with a message; none has turned up yet).
+half-open and open, toms, crashes, ride, …) with accents and ghost notes. Vocal tracks become a
+notation-only staff (no tab; a man's range in the treble clef with the 8 below) with the tab's lyrics under
+the notes, placed as Songsterr shows them; Guitar Pro has no voice sound, so they play on its clarinet, and
+they're written muted even without a recording. Not yet: D.S./D.C./coda jumps (a tab with one stops with a message; none has turned up yet).
 
 ## Development
 

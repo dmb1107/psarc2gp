@@ -2,7 +2,8 @@
 
 Status: **step 5 done** (2026-11-05): README, PRODUCT.md (decision 5 replaced, 15–21 added), CLAUDE.md
 and HANDOFF.md describe the Songsterr input. **Drums built** (2026-11-05): percussion staff, RSE drum kit;
-heard in time in GP8 on Enter Sandman with fetched audio (see step 6). Next: vocals. **Step 4 done** (2026-11-05): the bookmarklet works in Firefox and Chrome; `tools/verify-songsterr.js`
+heard in time in GP8 on Enter Sandman with fetched audio (see step 6). **Vocals built** (2026-11-05):
+notation and lyrics, lyrics placed as on Songsterr's page (see step 7); the user: "looks good" in GP8. **Step 4 done** (2026-11-05): the bookmarklet works in Firefox and Chrome; `tools/verify-songsterr.js`
 is clean on all six real bundles except one flagged first bar (see step 4). **Step 3 built** (2026-11-05): the real bookmarklet and the web app's Songsterr page (unlocking,
 invite link, songs from the bookmarklet or a saved file, tracks/video/audio choice, conversion in the worker,
 library records); checked in the browser pane with saved bundles and on Songsterr's real page, but **the
@@ -520,7 +521,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
 3. **Built** (2026-11-05): `web/songsterr-bookmarklet.js` (§1) and the Songsterr page (`#/songsterr`,
    `web/songsterr.js`): the bookmarklet button; the shared key (unlock, "Copy invite link", forget); songs
    from the bookmarklet or a saved `.json` (picked or dropped anywhere); a form with the tracks (guitars and
-   basses preselected, drums and vocals shown as "not yet"), the usable videos (Songsterr's first, backing
+   basses preselected, drums offered, vocals shown as "not yet" until step 7), the usable videos (Songsterr's first, backing
    tracks naming what they leave out, a count of the ones synced to other revisions) and the recording
    (fetch it, an audio file, or none). The worker (`convert-worker.js`) answers `songsterr-inspect` (played
    bars and which videos fit; the fetched tabs come back and are kept, so nothing is fetched twice) and
@@ -606,6 +607,30 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    its points measured the largest lag of the songs with drums (+40 ms before the 13 ms correction). So no
    automatic per-song offset for now; `--nudge` for the odd song. If one is ever needed, drum hits are the
    clearest signal to measure it with.
+
+7. **Vocals built** (2026-11-05). Songsterr's vocal tracks are frets on an arbitrary tuning (Come As You
+   Are: D-G-C-F-A-D; Enter Sandman's lead: viola tuning), one voice, the usual note fields (ties, slides,
+   bends, vibrato, dead notes for whispered words). Lyrics are Guitar Pro's: `newLyrics`, 5 lines of
+   `{ line, offset, text }` (offset 1 = bar 1; only line 1 used in both songs; a track without lyrics has
+   5 empty lines). Text syntax as GP's: spaces/newlines between words, a dash ends a syllable, `+` joins
+   words under one note, `[..]` comments; parentheses (`wa-(a)-nt`) are ordinary text. **Placement,
+   checked against Songsterr's page** (its `partLyrics-<bar>-<beat>` labels, read in the browser pane,
+   same revisions): syllables go on the first voice's notes in order, skipping rests and tied notes; two
+   spaces leave a note empty, and that empty syllable may land on a tied note (Enter Sandman's outro:
+   `hand  We're` skips nothing, because the empty syllable falls on hand's tie). With that rule all 303
+   syllables of Enter Sandman and 232 of Come As You Are sit on Songsterr's notes; without the tie
+   exception the outro shifts by one, without skipping ties nearly everything does. Grace notes: none
+   seen, treated as notes. score.js splits the text exactly like alphaTab's `Lyrics` (the test compares
+   them) and writes each syllable on its beat (`{lyrics ".."}`), since alphaTab's `applyLyrics` doesn't
+   skip ties. alphaTab writes them per beat plus a rebuilt track text with `dispatched="true"` (as GP8's
+   own files); the rebuilt text loses the double spaces, which matters only if the lyrics are re-edited
+   in Guitar Pro's lyrics editor. Staff: `\staff {score}`, the treble clef with `\ottava 8vb` when the
+   track's median note is below middle C (display only). Sound: Guitar Pro's clarinet (from the user's
+   GP8 file Salad Days, whose "Voice - Clarinet" track uses it at concert pitch); always muted.
+   Checked: verify-songsterr (every note and every syllable on its note, both songs, all four vocal
+   tracks), unit tests, render-check (lyrics under the notes, 8vb clef), psarc snapshot identical (15/15).
+   **In Guitar Pro 8** (the user, 2026-11-05): Come As You Are with the fetched recording, vocals and
+   guitars: "looks good". The lyrics editor round trip (double spaces) is still untried.
 
 ## Risks
 

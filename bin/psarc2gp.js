@@ -19,7 +19,7 @@ options:
   -o, --out <dir>   write .gp files into this folder
   -r, --recursive   also look in subfolders
       --no-audio    don't embed the recording
-      --no-mute     leave the instrument tracks unmuted (default: muted, only the recording plays)
+      --no-mute     leave the instrument tracks unmuted (default: muted, only the recording plays; vocals stay muted)
       --midi        General MIDI sounds instead of Guitar Pro's RSE sounds (MIDI lags the recording)
       --atex        also write the intermediate alphaTex (.atex) for debugging
       --pause       keep the console window open when done (used by the Windows Send To entries)
@@ -219,7 +219,7 @@ async function convertBundle(file) {
     `${r.audioSeconds ? `, ${fmtTime(r.audioSeconds)} of audio${r.audioProvider === "file" ? "" : ` from ${provider(r.audioProvider).label}`}` : ""}`);
   if (got && (got.offsetMs || opts.nudge)) log(`    sync shifted ${got.offsetMs + opts.nudge} ms (${[got.offsetMs && `${got.offsetMs} for ${provider(got.provider).label}`, opts.nudge && `${opts.nudge} nudge`].filter(Boolean).join(" + ")})`);
   if (got?.meta?.quotaRemaining != null) log(`    shared audio allowance left: ${got.meta.quotaRemaining} requests`);
-  for (const t of r.tracks) log(`    ${t.name}: ${t.notes} notes, ${t.tuning ? `tuning ${t.tuning}, ` : ""}${t.soundName}${r.muted ? " (muted)" : ""}${t.graceNotes ? `; ${t.graceNotes} grace notes` : ""}`);
+  for (const t of r.tracks) log(`    ${t.name}: ${t.notes} notes, ${t.kind === "vocals" ? (t.syllables ? `${t.syllables} syllables of lyrics, ` : "") : t.tuning ? `tuning ${t.tuning}, ` : ""}${t.soundName}${r.muted || t.kind === "vocals" ? " (muted)" : ""}${t.graceNotes ? `; ${t.graceNotes} grace notes` : ""}`);
   for (const w of r.warnings) log(`    warning: ${w}`);
   return "converted";
 }

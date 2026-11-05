@@ -3,6 +3,7 @@
 // Each bundle is converted in memory (no audio, nothing written), the .gp is read back with alphaTab, and:
 //  - every bar of every track and voice is exactly full
 //  - every Songsterr note is in the notation, on its string and fret, at its place in the bar (and nothing extra)
+//  - vocals: every syllable of the lyrics under its note (placed by Songsterr's rule, src/songsterr/score.js)
 //  - one sync point per played bar (repeats expanded) plus the end point, in play order, times rising,
 //    and score.gpif numbering them by played bar the way Guitar Pro 8 reads them (src/gp/syncpoints.js)
 //  - the tempo the video's points give each played bar, against the tab's written tempo: a song-wide
@@ -15,6 +16,7 @@ import { createRequire } from "node:module";
 import { convertSongsterr, inspectSongsterr } from "../src/songsterr/convert.js";
 import { convertibleTrackIndices } from "../src/songsterr/bundle.js";
 import { chooseVideo } from "../src/songsterr/sync.js";
+import { placeLyrics } from "../src/songsterr/score.js";
 import { readZip, entryData } from "../src/gp/zip.js";
 import { utf8 } from "../src/lib/bytes.js";
 
@@ -32,7 +34,7 @@ export const TEMPO = {
   plausibleBpm: [20, 400],
 };
 
-// Every track the converter can take (guitars, basses, drums, pianos, …; not vocals), so the check covers
+// Every track the converter can take (guitars, basses, drums, vocals, pianos, …), so the check covers
 // more than the default selection (as test/songsterr.test.js does)
 export function tracksToCheck(bundle) {
   return convertibleTrackIndices(bundle);
@@ -53,7 +55,10 @@ export async function verifySongsterr(bundle, { video = "default", allVideos = f
     if (c.incompleteBars) problems.push(`${t.name}: ${c.incompleteBars} incomplete bar(s)`);
     if (c.notFound) problems.push(`${t.name}: ${c.notFound} note(s) not found (first: ${c.missing[0]})`);
     if (c.extra) problems.push(`${t.name}: ${c.extra} note(s) not in the tab (first: ${c.extras[0]})`);
-    return { track: t.name, ...c };
+    if (t.kind !== "vocals") return { track: t.name, ...c };
+    const l = checkLyrics(data.find((d) => d.index === t.index).data, back.tracks[ti]);
+    if (l.wrong) problems.push(`${t.name}: ${l.wrong} syllable(s) missing or misplaced (first: ${l.first})`);
+    return { track: t.name, ...c, syllables: l.syllables, lyricsWrong: l.wrong };
   });
 
   const s = bundle.song;
@@ -172,6 +177,28 @@ export function checkNotes(src, track, masterBars) {
   return { bars: track.staves[0].bars.length, incompleteBars: incomplete, notes: expected, notFound: missing.length, extra: extras.length, missing, extras };
 }
 
+// Vocals: the syllables the lyrics put on each note of the first voice (bar, tick in the bar, line, text)
+// against the lyrics alphaTab read back from the .gp.
+export function checkLyrics(src, track) {
+  const { placed } = placeLyrics(src.newLyrics, src.measures);
+  const want = new Set();
+  src.measures.forEach((m, bi) => {
+    let at = [0, 1];
+    for (const [i, b] of (m.voices?.[0]?.beats ?? []).entries()) {
+      const onset = b.graceNote ? "g" : Math.round((at[0] / at[1]) * WHOLE);
+      (placed.get(`${bi}/${i}`) ?? []).forEach((s, row) => { if (s) want.add(`${bi}/${onset}/${row}/${s}`); });
+      if (!b.graceNote && Array.isArray(b.duration)) at = addFrac(at, b.duration);
+    }
+  });
+  const got = new Set();
+  track.staves[0].bars.forEach((bar, bi) => {
+    for (const b of bar.voices[0]?.beats ?? []) (b.lyrics ?? []).forEach((s, row) => { if (s) got.add(`${bi}/${b.graceType !== 0 ? "g" : b.displayStart}/${row}/${s}`); });
+  });
+  const wrong = [...want].filter((k) => !got.has(k)).concat([...got].filter((k) => !want.has(k)));
+  const where = (k) => { const [bar, at, row, ...s] = k.split("/"); return `bar ${+bar + 1} tick ${at} line ${+row + 1} "${s.join("/")}"`; };
+  return { syllables: want.size, wrong: wrong.length, first: wrong.length ? where(wrong[0]) : null };
+}
+
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
 function addFrac([a, b], [c, d]) { const n = a * d + c * b, m = b * d, g = gcd(n, m) || 1; return [n / g, m / g]; }
 const pct = (x) => `${Math.round(x * 100)}%`;
@@ -240,7 +267,7 @@ if (process.argv[1] && process.argv[1].endsWith("verify-songsterr.js")) {
     r.file = f;
     results.push(r);
     console.log(`${r.title} (revision ${r.revision}): ${r.bars} bars, ${r.playedBars} played, ${r.syncPoints} sync points${r.video ? `, video ${r.video}` : ""}`);
-    for (const t of r.tracks) console.log(`   ${t.track.padEnd(22)} bars ${t.bars} incomplete ${t.incompleteBars}  notes ${t.notes} not found ${t.notFound} extra ${t.extra}`);
+    for (const t of r.tracks) console.log(`   ${t.track.padEnd(22)} bars ${t.bars} incomplete ${t.incompleteBars}  notes ${t.notes} not found ${t.notFound} extra ${t.extra}${t.syllables != null ? `  syllables ${t.syllables} misplaced ${t.lyricsWrong}` : ""}`);
     for (const t of r.tempo) console.log(`   ${t.chosen ? "*" : " "} tempo ${t.videoId} ${t.feature.padEnd(11)}${t.strayPoint != null ? ` (point ${t.strayPoint + 1} left out)` : ""} video/tab ${pct(t.median).padStart(4)}  bad points ${t.outliers}  implausible ${t.implausible}  uneven ${t.uneven}/${t.bars}`);
     for (const w of r.warnings) console.log(`   warning: ${w}`);
     for (const n of r.notes) console.log(`   note: ${n}`);

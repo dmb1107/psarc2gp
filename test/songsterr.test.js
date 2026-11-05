@@ -8,7 +8,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
-import { buildAlphaTex, DRUM_ARTICULATIONS } from "../src/songsterr/score.js";
+import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
 import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
@@ -313,17 +313,87 @@ const drumBar = () => bar([
   beat(4, [note(36, 4.5), note(49, -1)]), beat(4, [note(38, 1.5)]),
 ]);
 
-test("vocals are not converted yet; default tracks are guitars and basses, drums on request", async () => {
+test("default tracks are guitars and basses; drums and vocals on request", async () => {
   const g = track([restBar()], { name: "Gtr", instrumentId: 30, tuning: [64, 59, 55, 50, 45, 40] });
+  const v = track([restBar()], { name: "Vox", instrumentId: 54, tuning: [64, 59, 55, 50, 45, 40] });
   const metas = [{ name: "Vox", isVocalTrack: true, instrumentId: 54 }, { name: "Gtr", instrumentId: 30 }, { name: "Drums", instrumentId: 1024, isDrums: true }];
-  const b = bundle([null, g, drumTrack([restBar()])], [video([0])], metas);
+  const b = bundle([v, g, drumTrack([restBar()])], [video([0])], metas);
   assert.deepEqual(defaultTrackIndices(b), [1]);
-  assert.deepEqual(convertibleTrackIndices(b), [1, 2]);
-  await assert.rejects(convertSongsterr(b, { tracks: [0] }), /is vocals/);
+  assert.deepEqual(convertibleTrackIndices(b), [0, 1, 2]);
   const r = await convertSongsterr(b, {});
   assert.equal(r.report.tracks[0].sound, "distortion");
-  const d = await convertSongsterr(b, { tracks: [1, 2] });
-  assert.deepEqual(d.report.tracks.map((t) => t.sound), ["distortion", "drums"]);
+  const d = await convertSongsterr(b, { tracks: [0, 1, 2] });
+  assert.deepEqual(d.report.tracks.map((t) => t.sound), ["voice", "distortion", "drums"]);
+});
+
+// ---- vocals
+
+test("lyrics: split into syllables exactly as alphaTab (Guitar Pro's format) does", () => {
+  const texts = [
+    "Come, as you are,\nAs I wa-(a)-nt+yo-u to be\n\nMe-mo-ri-(i)-(i)-a",
+    "Take  my  hand  We're off to ne-ver ne-ver-land",
+    "[Verse 1] one two-- three_ four [x]five\r\n six\tseven   eight-",
+    "", "-", "a - b", " lead", "trail ", "a+b+c d_+e",
+  ];
+  for (const text of texts) {
+    const l = new alphaTab.model.Lyrics();
+    l.text = text;
+    l.finish(false);
+    assert.deepEqual(lyricChunks(text), l.chunks, JSON.stringify(text));
+  }
+  assert.deepEqual(lyricChunks("wa-(a)-nt+yo-u"), ["wa-", "(a)-", "nt yo-", "u"]);
+  assert.deepEqual(lyricChunks("Take  my"), ["Take", "", "my"]);
+});
+
+test("lyrics: placed on notes in order, skipping rests and tied notes; two spaces leave a note empty", () => {
+  const m = [
+    bar([beat(4, []), beat(4, [note(0, 0)]), beat(4, [note(0, 0, { tie: true })]), beat(4, [note(2, 0)])]),
+    bar([beat(4, [note(3, 0)]), beat(4, [note(3, 0, { tie: true })]), beat(4, [note(5, 0)]), beat(4, [note(5, 0)])]),
+  ];
+  const at = (lines) => Object.fromEntries([...placeLyrics(lines, m).placed].map(([k, v]) => [k, v.join("|")]));
+  // "a" on 0/1, the tie 0/2 skipped, "b-" on 0/3, "c" on 1/0, then the empty syllable takes the tied 1/1
+  assert.deepEqual(at([{ line: 1, offset: 1, text: "a b-c  d e" }]), { "0/1": "a", "0/3": "b-", "1/0": "c", "1/2": "d", "1/3": "e" });
+  // a line starting on bar 2, on the second row; syllables past the last note are counted, not placed
+  const r = placeLyrics([{ line: 1, offset: 1, text: "" }, { line: 2, offset: 2, text: "x y z w" }], m);
+  assert.deepEqual([...r.placed].map(([k, v]) => [k, v]), [["1/0", [, "x"]], ["1/2", [, "y"]], ["1/3", [, "z"]]]);
+  assert.deepEqual(r.lines, [{ row: 1, syllables: 4, placed: 3 }]);
+});
+
+test("vocals: notation only, lyrics on the notes, a man's range in the treble clef an octave up", async () => {
+  const tuning = [62, 57, 53, 48, 43, 38];
+  const low = track([
+    bar([beat(4, []), beat(4, [note(2, 4)]), beat(4, [note(2, 4, { tie: true })]), beat(4, [note(4, 3)])]),
+    bar([beat(2, [note(0, 3)]), beat(2, [])]),
+  ], { name: "Vox", instrumentId: 66, tuning, newLyrics: [{ line: 1, offset: 1, text: "Hel-lo there" }, { line: 2, offset: 1, text: "" }] });
+  const high = track([bar([beat(1, [note(5, 0)])]), bar([beat(1, [])])], { name: "Vox 2", instrumentId: 54, tuning });
+  const metas = [{ name: "Vox", isVocalTrack: true, instrumentId: 66 }, { name: "Vox 2", isVocalTrack: true, instrumentId: 54 }];
+  const warnings = [];
+  const b = bundle([low, high], [video([0, 2])], metas);
+  const { tex, tracks } = buildAlphaTex(b, [{ index: 0, meta: metas[0], data: low }, { index: 1, meta: metas[1], data: high }], { warn: (w) => warnings.push(w) });
+  assert.deepEqual(warnings, []);
+  assert.equal(tracks[0].syllables, 3);
+  const { score } = load(tex);
+  const [v, v2] = score.tracks;
+  assert.equal(v.staves[0].showTablature, false);
+  assert.equal(v.staves[0].showStandardNotation, true);
+  assert.equal(v.playbackInfo.program, 71);
+  assert.equal(v.staves[0].bars[0].clefOttava, alphaTab.model.Ottavia._8vb);
+  assert.equal(v2.staves[0].bars[0].clefOttava, alphaTab.model.Ottavia.Regular);
+  const beats = v.staves[0].bars.flatMap((x) => x.voices[0].beats);
+  assert.deepEqual(beats.map((x) => x.lyrics?.[0] ?? null), [null, "Hel-", null, "lo", "there", null]);
+  assert.deepEqual(beats.flatMap((x) => x.notes).map((n) => n.realValue), [45, 45, 52, 48]);
+
+  // in the .gp: the lyrics on their beats, Guitar Pro's clarinet, and muted even without a recording
+  const r = await convertSongsterr(b, { tracks: [0, 1] });
+  assert.equal(r.report.muted, false);
+  const gpif = new TextDecoder().decode(await unzipEntry(r.gp, "Content/score.gpif"));
+  const t0 = gpif.match(/<Track id="0">[\s\S]*?<\/Track>/)[0];
+  assert.match(t0, /<Path>Orchestra\/Winds\/Clarinet<\/Path>/);
+  assert.match(t0, /<SoundbankPatch>Clarinet-Solo<\/SoundbankPatch>/);
+  assert.match(t0, /<Type>clarinet<\/Type>/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.ok(back.tracks.every((t) => t.playbackInfo.isMute));
+  assert.deepEqual(back.tracks[0].staves[0].bars.flatMap((x) => x.voices[0].beats).map((x) => x.lyrics?.[0] || null), [null, "Hel-", null, "lo", "there", null]);
 });
 
 test("drums: a percussion staff, notes by articulation id with accents and ghosts", () => {

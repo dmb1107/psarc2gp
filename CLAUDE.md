@@ -150,6 +150,10 @@ Songsterr:
   (`\articulation (p42 42)`, then `p42.8`); names like `a36` or `d38` parse as pitches. alphaTab gives a
   percussion staff a treble clef unless told `\clef neutral`. `DRUM_ARTICULATIONS` in score.js is
   alphaTab 1.8.4's id list (not exported; a test reads it from alphaTab's error text): re-check on upgrade.
+- Vocal lyrics (`newLyrics`) are Guitar Pro's format. Songsterr places syllables on the first voice's notes
+  skipping rests and tied notes, and two spaces leave a note empty (that empty one may land on a tie);
+  alphaTab's `applyLyrics` doesn't skip ties, so score.js places them and writes them per beat. Checked
+  against Songsterr's page (SONGSTERR.md step 7). Vocal tracks are always muted (the user's choice).
 - An unknown bar field stops the conversion (it might change the play order, e.g. a D.S. or coda, none
   seen yet): add it to SONGSTERR.md finding 8 and map it, don't skip it.
 - The provider's MP3s have no gapless header, so their 13 ms encoder delay plays: `offsets` in

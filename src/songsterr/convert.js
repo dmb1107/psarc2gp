@@ -1,7 +1,7 @@
 // Songsterr bundle (+ audio) -> Guitar Pro 8 (.gp) with a sync point on every played bar.
 // Runs in Node and in browsers, like src/convert.js: bundle and bytes in, bytes out.
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
-import { validateBundle, loadTracks, defaultTrackIndices, trackKind, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
+import { validateBundle, loadTracks, defaultTrackIndices, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
 import { playedBars, chooseVideo, describeVideos, fitVideos, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
@@ -26,10 +26,10 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
   validateBundle(bundle);
   const indices = tracks ?? defaultTrackIndices(bundle);
   if (!indices.length) {
-    const others = bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => trackKind(t) !== "vocals");
+    const others = bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty);
     throw new Error("this song has no guitar or bass track" + (others.length
       ? `; choose tracks by number (--tracks): ${others.map(({ t, i }) => `${i} ${t.name} (${t.instrument ?? `instrument ${t.instrumentId}`})`).join(", ")}`
-      : " (vocals aren't converted yet)"));
+      : ""));
   }
   const data = await loadTracks(bundle, indices, { fetch });
   const built = buildAlphaTex(bundle, data, { warn });
@@ -53,10 +53,6 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
 export async function convertSongsterr(bundle, { tracks = null, video = "default", audio = null, rse = true, mute = true, fetch, onWarning = () => {} } = {}) {
   const warnings = [];
   const warn = (m) => { warnings.push(m); onWarning(m); };
-  for (const i of tracks ?? []) {
-    const kind = trackKind(bundle.song.tracks[i] ?? {});
-    if (kind === "vocals") throw new Error(`track ${i} (${bundle.song.tracks[i].name}) is vocals; vocals aren't converted yet`);
-  }
   const { built, score, settings, played, fitted } = await inspectSongsterr(bundle, { tracks, fetch, warn });
   const written = score.masterBars.length;
   let chosen = null;
@@ -86,7 +82,9 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   }
 
   mute = mute && !!audio;
-  for (const t of score.tracks) t.playbackInfo.isMute = mute;
+  // vocal tracks stay silent even without a recording (the user's choice): unmute one in Guitar Pro to
+  // hear the melody on its clarinet
+  score.tracks.forEach((t, i) => { t.playbackInfo.isMute = mute || built.tracks[i].kind === "vocals"; });
   if (audio) {
     score.backingTrack = new alphaTab.model.BackingTrack();
     score.backingTrack.rawAudioFile = audio.bytes;
