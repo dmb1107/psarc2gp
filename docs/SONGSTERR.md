@@ -486,8 +486,8 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    **With the real key** (2026-11-05): the user made the dedicated RapidAPI account and wrote
    `web/songsterr-secrets.json` with the tool; the CLI fetched UNDERWATER BOI's default video (Pb7-ICi-r8Y)
    without `--audio`: a 3.7 MB, 44.1 kHz MP3 (3:05, ffmpeg "Lavf62", **no Info/LAME header**). The user
-   played it in GP8: "sounds good". The error answers (401/403/429, "video unavailable") are still
-   untried; they follow RapidAPI's gateway conventions.
+   played it in GP8: "sounds good". The error answers (401/403/429, "video unavailable") are untried
+   and stay so (the user can't provoke them, 2026-11-05); they follow RapidAPI's gateway conventions.
    **Offset, measured** on that file: it is the same recording as the step 1 MP3 (cross-correlation 0.99
    in four 20 s windows across the song, constant lag, no drift), 38 ms later than it. Note attacks
    (spectral flux, full band and >2 kHz alike) against the beat grid from Songsterr's points (392 beats):
@@ -565,7 +565,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    layout. Video/tab tempo: UNDERWATER BOI 101%, Enter Sandman 101%, Autumn Leaves 99%, Lágrima 84%,
    Für Elise 71%. **One flag:** Für Elise's default video gives the 1/8 pickup 1.85 s (16 bpm; the bars after
    it run at about 55–70): either the first point sits before the music starts, or the pianist holds the
-   pickup. Worth a listen in GP8 (does the first E come in late?).
+   pickup. Not followed up: the user doesn't care about this song (2026-11-05).
    **Bookmarklet in Chrome: works** (the user, 2026-11-05), as in Firefox. Step 4 is done.
    **Safari: Songsterr's own page answers 403** (the user, 2026-11-05), while other browsers on the same
    computer get it; so the bookmarklet never runs there. Not caused by psarc2gp (nothing of ours runs in
@@ -590,6 +590,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    You Are 1,369, UNDERWATER BOI 882), bars full; render-check (percussion clef, noteheads per piece);
    unit tests; psarc snapshot identical (15/15). **Not yet:** heard in Guitar Pro 8 (does the RSE kit
    play, in time with the recording, with the right pieces?) and in the web player's synth.
+   **Web player's synth: drums work** (the user, 2026-11-05).
    **First listen (the user, 2026-11-05): "the drums sound off beat"** (UNDERWATER BOI with the step 1 MP3
    given as `--audio`, so no provider offset). Measured on that file against the drum tab's own hits
    (played bars × the default video's points, linear within each bar; spectral flux per band, windows
@@ -630,7 +631,8 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    Checked: verify-songsterr (every note and every syllable on its note, both songs, all four vocal
    tracks), unit tests, render-check (lyrics under the notes, 8vb clef), psarc snapshot identical (15/15).
    **In Guitar Pro 8** (the user, 2026-11-05): Come As You Are with the fetched recording, vocals and
-   guitars: "looks good". The lyrics editor round trip (double spaces) is still untried.
+   guitars: "looks good". The lyrics editor round trip (double spaces) is untried and not
+   needed (the user doesn't edit lyrics, 2026-11-05).
 
 ## Risks
 

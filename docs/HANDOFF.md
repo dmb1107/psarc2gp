@@ -185,13 +185,15 @@ design, and per step what was built, measured and heard. In short:
   recording across all 24 bars in GP8 once the sync layout was fixed). Bookmarklet handoff worked in Firefox and Chrome; Safari gets a 403
   from Songsterr itself.
 - `tools/verify-songsterr.js` on the six saved songs in `.samples/songsterr/`: every note found, bars full,
-  sync layout right; one flag, Für Elise's pickup bar gets 1.85 s from its video (not yet listened to).
+  sync layout right; one flag, Für Elise's pickup bar gets 1.85 s from its video (left alone: the user
+  doesn't care about that song).
 - psarc output unchanged: `tools/snapshot.js --compare` against the baseline taken before the branch,
   15/15 identical at every step.
 
 Drums (2026-11-05): drum tracks convert (on request, not by default) to a percussion staff with Guitar
 Pro's RSE drum kit; every drum note of the three songs with drums found by verify-songsterr; rendered
-with alphaTab; heard in time in Guitar Pro 8 (Enter Sandman, fetched audio, from the web app). A test
+with alphaTab; heard in time in Guitar Pro 8 (Enter Sandman, fetched audio, from the web app) and
+working in the web player's synth (the user). A test
 with an MP3 from elsewhere sounded off by 20 ms: that file's own offset (SONGSTERR.md step 6).
 
 Vocals (2026-11-05): vocal tracks convert (on request) to a notation-only staff with the lyrics, placed
@@ -201,8 +203,10 @@ Come As You Are on the same notes. Guitar Pro's clarinet RSE sound (as in the us
 track), always muted (the user's choice). verify-songsterr checks every syllable; rendered with alphaTab.
 Seen in Guitar Pro 8 by the user (Come As You Are with the fetched recording): "looks good".
 
-Not done: D.S./D.C./coda jumps (no tab with one found yet), the provider's error answers
-(401/403/429) with the real service, per-song automatic offset.
+Not done: D.S./D.C./coda jumps (no tab with one found yet), per-song automatic offset (research;
+`--nudge` meanwhile). Left alone by the user's choice (2026-11-05): the provider's error answers
+(401/403/429) with the real service (can't be provoked), the lyrics editor round trip (lyrics aren't
+edited), Safari (Songsterr answers 403 there).
 
 ## Library sweep (2026-10-25)
 
