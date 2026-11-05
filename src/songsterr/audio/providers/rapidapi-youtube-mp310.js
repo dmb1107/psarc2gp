@@ -54,7 +54,8 @@ export async function fetchAudio({ videoId, secret, fetch = globalThis.fetch, si
   return { bytes, format: null, provider: id, meta: { downloadHost: url.host, quotaRemaining: quotaRemaining == null ? null : Number(quotaRemaining) } };
 }
 
-function classify(status, said) {
+// RapidAPI gateway answers (shared with the other RapidAPI provider)
+export function classify(status, said) {
   const detail = `the API answered ${status}${said ? `: ${said}` : ""}`;
   if (status === 401 || status === 403) return new AudioError("auth", detail);
   if (status === 429) return /quota|monthly|daily|plan/i.test(said) ? new AudioError("quota", detail) : new AudioError("unavailable", `${detail} (too many requests; try again in a minute)`);

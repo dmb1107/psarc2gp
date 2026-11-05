@@ -3,18 +3,19 @@
 // Every provider (providers/*.js) exports id, label, needsSecret and
 //   fetchAudio({ videoId, secret, fetch, signal, onProgress, file }) → { bytes, format, provider, meta }
 // and throws AudioError (errors.js) with one of the shared codes. getAudio runs the configured providers
-// in order, falls through on "unavailable"/"failed", and checks the result (validate.js) the same way
+// in order, falls through on "unavailable"/"failed" (and past a backup whose key isn't in the file), and checks the result (validate.js) the same way
 // whichever provider supplied it. Platform-neutral: fetch is passed in.
 import config from "./config.js";
 import { AudioError, STOPS_FALLBACK } from "./errors.js";
 import { checkAudio } from "./validate.js";
 import * as rapidapi from "./providers/rapidapi-youtube-mp310.js";
+import * as infoDownload from "./providers/rapidapi-youtube-info-download.js";
 import * as file from "./providers/file.js";
 
 export { AudioError, describeAudioError, AUDIO_ERROR_CODES } from "./errors.js";
 export { config };
 
-export const PROVIDERS = Object.fromEntries([rapidapi, file].map((p) => [p.id, p]));
+export const PROVIDERS = Object.fromEntries([rapidapi, infoDownload, file].map((p) => [p.id, p]));
 
 export function provider(id) {
   const p = PROVIDERS[id];
@@ -53,6 +54,8 @@ export async function getAudio(videoId, { providers = config.providers, secrets 
       const error = e instanceof AudioError ? e : new AudioError("failed", e?.message ?? String(e));
       error.provider = id;
       attempts.push({ provider: id, error });
+      // a backup with no key in the file is passed over (the first provider's error is the one reported)
+      if (error.missingSecret && attempts.length > 1) continue;
       if (STOPS_FALLBACK.has(error.code)) break;
     }
   }

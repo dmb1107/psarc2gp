@@ -159,8 +159,10 @@ Songsterr:
   against Songsterr's page (SONGSTERR.md step 7). Vocal tracks are always muted (the user's choice).
 - An unknown bar field stops the conversion (it might change the play order, e.g. a D.S. or coda, none
   seen yet): add it to SONGSTERR.md finding 8 and map it, don't skip it.
-- The provider's MP3s have no gapless header, so their 13 ms encoder delay plays: `offsets` in
-  `src/songsterr/audio/config.js`. The points' own lag varies per video by more than that.
+- Two audio providers, in config.js order: the backup runs when the first fails with anything but auth
+  (it has its own allowance), and is skipped while the key file has no key for it. Both providers' MP3s
+  have no gapless header, so their 13 ms encoder delay plays (the two are in step to the sample): `offsets`
+  in `src/songsterr/audio/config.js`. The points' own lag varies per video by more than that.
 
 Web app and browser port:
 - The web app is branded **tab2gp** (the user's choice); the CLI, the repo/Pages URL and the Windows

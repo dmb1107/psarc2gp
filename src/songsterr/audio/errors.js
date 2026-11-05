@@ -6,11 +6,13 @@
 //   not-found    the video is private, removed or blocked in the region
 //   failed       conversion error or unusable output (wrong format, too short, too big)
 //
-// On unavailable or failed the next provider in the config is tried; auth, quota and not-found stop
-// there, since another provider wouldn't fix a private video (and the user should hear about the key).
+// On every code but auth the next provider in the config is tried: a backup has its own allowance (quota),
+// and one provider's "not found" may be its own failure to reach the video (refused requests cost nothing).
+// auth stops there, so the user hears about the key. Until 2026-11-05, with one provider, quota and
+// not-found stopped too. When every provider fails, the first one's error is what the user reads.
 
 export const AUDIO_ERROR_CODES = ["auth", "quota", "unavailable", "not-found", "failed"];
-export const STOPS_FALLBACK = new Set(["auth", "quota", "not-found"]);
+export const STOPS_FALLBACK = new Set(["auth"]);
 
 export class AudioError extends Error {
   constructor(code, message, extra = {}) {
