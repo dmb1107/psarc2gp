@@ -105,6 +105,10 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 .q-state { color: var(--muted); }
 .q-state.error { color: var(--danger); }
 .q-state.done { color: var(--fg); }
+.q-help { flex-basis: 100%; font-size: 12.5px; }
+.q-help p { margin: 2px 0; }
+.q-help ul { list-style: disc; margin: 0; padding-left: 20px; }
+#queue .q-help li { display: list-item; border: 0; border-radius: 0; padding: 0; margin: 0 0 2px; }
 .q-warn { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin: 0; white-space: pre-line; }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;

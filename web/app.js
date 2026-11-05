@@ -237,6 +237,8 @@ async function finish(item, result) {
       : /quota/i.test(err.name ?? "") || /quota/i.test(err.message) ? "not enough room in this browser's storage" : err.message;
     // with a backup, each service's own reason (the message above is the first one's)
     item.reasons = result?.tried?.length > 1 ? result.tried.map((t) => `${t.service}: ${t.reason}`) : [];
+    // the services were asked and couldn't deliver (not a refused key): say how else to get the audio
+    item.otherWays = !!result?.tried?.length && result.code !== "auth";
   }
   if (item.job) delete item.job.secrets; // not kept around once used
   renderQueue();
@@ -249,6 +251,21 @@ async function replace(item) {
   item.state = "replaced";
   renderQueue();
   refreshLibrary();
+}
+
+// When the audio services can't deliver a video: other ways to get its audio. The file has to be of this
+// very video, since the sync points are its timings; another upload of the song won't line up.
+function otherWays(videoId) {
+  const watch = /^[\w-]{11}$/.test(videoId ?? "") ? `https://www.youtube.com/watch?v=${videoId}` : null;
+  const li = (...parts) => el("li", {}, ...parts);
+  return el("div", { className: "q-help" },
+    el("p", { textContent: "Other ways to get the audio:" }),
+    el("ul", {},
+      li("Download this video's audio as an MP3 with another YouTube-to-MP3 converter",
+        ...(watch ? [" (", el("a", { href: watch, target: "_blank", rel: "noopener", textContent: watch.replace("https://www.", "") }), ")"] : []),
+        ", then go back to the song and choose \u201cUse an audio file I have\u201d."),
+      li("Or go back to the song and pick another of its videos, if it lists more than one."),
+      li("It has to be one of the song's videos: the sync follows that video's timings, so another upload of the song (a mirror, a lyric video) won't line up.")));
 }
 
 function renderQueue() {
@@ -274,6 +291,7 @@ function renderQueue() {
         state(`Couldn't convert: ${item.message}`, "error");
         if (item.kind === "songsterr") button("Back to the song", () => { location.hash = "#/songsterr"; });
         if (item.reasons?.length) li.append(el("p", { className: "q-warn", textContent: item.reasons.join("\n") }));
+        if (item.otherWays) li.append(otherWays(item.job?.video));
         break;
     }
     if (item.warnings?.length) li.append(el("p", { className: "q-warn", textContent: item.warnings.map((w) => `Note: ${w}`).join("\n") }));
