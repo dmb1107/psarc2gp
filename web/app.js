@@ -1,4 +1,4 @@
-// psarc2gp in the browser: convert Rocksmith .psarc files (and Songsterr songs, see songsterr.js) into
+// tab2gp, the psarc2gp web app: convert Rocksmith .psarc files (and Songsterr songs, see songsterr.js) into
 // Guitar Pro files, keep them in a library in this browser, and practise with them. Conversion runs on this
 // computer and nothing is uploaded; a Songsterr song's audio is fetched by video id from a conversion service.
 import { Player } from "./player.js";
@@ -358,13 +358,13 @@ async function route() {
   if (location.hash === "#/songsterr") {
     closePlayer();
     showView("songsterr");
-    document.title = "Songs from Songsterr · psarc2gp";
+    document.title = "Songs from Songsterr · tab2gp";
     return;
   }
   if (location.hash === "#/setup") {
     closePlayer();
     showView("setup");
-    document.title = "Setup and help · psarc2gp";
+    document.title = "Setup and help · tab2gp";
     return;
   }
   const m = location.hash.match(/^#\/play\/(.+)$/);
@@ -377,7 +377,7 @@ async function route() {
   showView("player");
   $("title").textContent = song.title || song.name;
   $("byline").textContent = [song.artist, song.album].filter(Boolean).join(" · ");
-  document.title = `${song.title || song.name} · psarc2gp`;
+  document.title = `${song.title || song.name} · tab2gp`;
   $("status").textContent = "Loading…";
   try {
     const file = await getFile(id);
@@ -399,7 +399,7 @@ function closePlayer() {
 function showLibrary() {
   closePlayer();
   showView("library");
-  document.title = "psarc2gp";
+  document.title = "tab2gp";
 }
 
 // songs added as .gp files have no length until the player has read them

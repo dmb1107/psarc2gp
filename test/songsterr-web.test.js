@@ -105,7 +105,7 @@ test("bookmarklet: hands the song over after the app says ready, song fields onl
   page.message({ type: "psarc2gp-ready" }); // a second ready doesn't send it again
   assert.equal(page.win.posted.filter((p) => p.data.type === "psarc2gp-song").length, 1);
   page.message({ type: "psarc2gp-received" });
-  assert.match(page.text(), /Sent to psarc2gp/);
+  assert.match(page.text(), /Sent to tab2gp/);
 });
 
 test("bookmarklet: no password when the button was built locked", async () => {

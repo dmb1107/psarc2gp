@@ -1,6 +1,6 @@
-/* The "Open in psarc2gp" bookmarklet. It runs on a Songsterr song page in the user's own browser, reads
+/* The "Open in tab2gp" bookmarklet. It runs on a Songsterr song page in the user's own browser, reads
    what the page has already loaded (the song fields of the page's state, the video sync points from the
-   browser's cache) and hands them to the psarc2gp web app tab it opens. It makes no request to
+   browser's cache) and hands them to the tab2gp web app tab it opens. It makes no request to
    Songsterr's API unless the points aren't cached (then one, like the page's own), and it sends nothing
    anywhere but the web app's origin.
 
@@ -24,7 +24,7 @@
   panel.style.cssText = "position:fixed;z-index:2147483647;right:12px;bottom:12px;width:360px;max-width:calc(100vw - 24px);max-height:60vh;overflow:auto;padding:10px 12px;background:#1b1b1b;color:#f3f3f3;font:13px/1.45 system-ui,sans-serif;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.45);text-align:left";
   const head = document.createElement("div");
   head.style.cssText = "display:flex;justify-content:space-between;align-items:center;font-weight:600;margin-bottom:4px";
-  head.textContent = "psarc2gp";
+  head.textContent = "tab2gp";
   const close = document.createElement("button");
   close.textContent = "×";
   close.title = "Close";
@@ -66,9 +66,9 @@
 
   /* open the app now, while the click still counts as a user gesture (popup blockers) */
   const win = window.open(APP + "#/songsterr", "psarc2gp");
-  const status = say(win ? "Opening psarc2gp…" : "The browser blocked the new tab: allow pop-ups for songsterr.com and click again, or save the song below.");
+  const status = say(win ? "Opening tab2gp…" : "The browser blocked the new tab: allow pop-ups for songsterr.com and click again, or save the song below.");
 
-  /* fallback: save the song as a file (with every track's tab) to open in psarc2gp or the CLI */
+  /* fallback: save the song as a file (with every track's tab) to open in tab2gp or the CLI */
   const save = document.createElement("a");
   save.href = "#";
   save.textContent = "Save the song as a file (.json)";
@@ -106,7 +106,7 @@
     if (!win || e.source !== win || e.origin !== origin || !e.data) return;
     if (e.data.type === "psarc2gp-ready") { ready = true; clearInterval(hello); send(); }
     if (e.data.type === "psarc2gp-received") {
-      status.textContent = "Sent to psarc2gp: carry on in its tab.";
+      status.textContent = "Sent to tab2gp: carry on in its tab.";
       status.style.color = "#9fe0a0";
       setTimeout(() => panel.remove(), 8000);
     }
@@ -115,7 +115,7 @@
     hello = setInterval(() => { try { win.postMessage({ type: "psarc2gp-hello" }, origin); } catch (e) { /* not there yet */ } }, 250);
     setTimeout(() => {
       clearInterval(hello);
-      if (!ready) { status.textContent = "psarc2gp didn't answer. Is its tab open at " + APP + "? Save the song below and open the file there instead."; status.style.color = "#ff99a4"; }
+      if (!ready) { status.textContent = "tab2gp didn't answer. Is its tab open at " + APP + "? Save the song below and open the file there instead."; status.style.color = "#ff99a4"; }
     }, 20000);
   }
 

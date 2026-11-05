@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>psarc2gp</title>
-<meta name="description" content="Convert Rocksmith 2014 custom songs (.psarc) into Guitar Pro files with the recording synced, and practise with them, all in your browser.">
+<title>tab2gp</title>
+<meta name="description" content="Convert Rocksmith 2014 custom songs (.psarc) and Songsterr tabs into Guitar Pro files with the recording synced, and practise with them, all in your browser.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
 <header class="appbar">
-  <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">psarc2gp</a>
+  <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">tab2gp</a>
   <span class="tagline">Rocksmith and Songsterr songs to Guitar Pro, synced to the recording</span>
   <a id="nav-setup" class="navlink" href="#/setup">Setup and help</a>
   <button id="theme" class="quiet" type="button" title="Colour theme">Theme: system</button>
@@ -28,7 +28,7 @@
       </div>
       <div class="source">
         <h3><a href="https://www.songsterr.com/" target="_blank" rel="noopener">Songsterr</a></h3>
-        <p>A tab site with a huge catalogue for guitar, bass and more, most songs synced to a video of the recording. With the psarc2gp bookmark, open a song there and click the bookmark: the tab comes here with the video's audio.
+        <p>A tab site with a huge catalogue for guitar, bass and more, most songs synced to a video of the recording. With the tab2gp bookmark, open a song there and click the bookmark: the tab comes here with the video's audio.
           <a href="#/setup">Set up the bookmark</a></p>
       </div>
     </div>
@@ -107,7 +107,7 @@
 
   <p id="ss-notice" class="note" role="status"></p>
   <section id="ss-empty" class="ss-box">
-    <p>No song yet. Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and click the psarc2gp bookmark: the song appears here.</p>
+    <p>No song yet. Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and click the tab2gp bookmark: the song appears here.</p>
     <p class="note">No bookmark yet? <a href="#/setup">Set it up</a> (it takes a minute).</p>
   </section>
 </section>
@@ -119,7 +119,7 @@
   </div>
 
   <section class="setup-part">
-    <h2>How to use psarc2gp</h2>
+    <h2>How to use tab2gp</h2>
     <ol class="steps">
       <li><b>Get songs.</b> Rocksmith custom songs (.psarc) from <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge</a>, or tabs from <a href="https://www.songsterr.com/" target="_blank" rel="noopener">Songsterr</a> with the bookmark below.</li>
       <li><b>Add them.</b> Drop .psarc files or a whole folder on the <a href="#/">library</a> page (or use its buttons). Each song becomes a Guitar Pro 8 file with the original recording and a sync point on every beat.</li>
@@ -131,7 +131,7 @@
 
   <section class="setup-part">
     <h2>Songsterr: 1. The shared audio key (optional)</h2>
-    <p class="note">psarc2gp gets a Songsterr video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file of the video instead.</p>
+    <p class="note">tab2gp gets a Songsterr video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file of the video instead.</p>
     <div id="ss-key-locked" hidden>
       <form id="ss-unlock-form" class="row">
         <label>Password <input id="ss-password" type="password" autocomplete="current-password"></label>
@@ -143,19 +143,19 @@
       <button id="ss-invite" type="button">Copy invite link</button>
       <button id="ss-forget" class="quiet" type="button">Forget the password</button>
     </div>
-    <p id="ss-key-none" class="note" hidden>This copy of psarc2gp has no shared audio key: songs need your own audio file.</p>
+    <p id="ss-key-none" class="note" hidden>This copy of tab2gp has no shared audio key: songs need your own audio file.</p>
     <p id="ss-key-message" class="note" role="status"></p>
   </section>
 
   <section class="setup-part">
     <h2>Songsterr: 2. The bookmark</h2>
     <ol class="steps">
-      <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in psarc2gp</a>
+      <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in tab2gp</a>
         <p id="ss-bookmarklet-key" class="note"></p></li>
       <li>Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and wait until its tab has loaded.</li>
-      <li>Click the bookmark. psarc2gp opens with the song: pick the tracks and the video, and it becomes a Guitar Pro file with the video's audio, synced bar by bar to Songsterr's own timings.</li>
+      <li>Click the bookmark. tab2gp opens with the song: pick the tracks and the video, and it becomes a Guitar Pro file with the video's audio, synced bar by bar to Songsterr's own timings.</li>
     </ol>
-    <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to psarc2gp. If the handover doesn't work, its panel saves the song as a file instead:
+    <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to tab2gp. If the handover doesn't work, its panel saves the song as a file instead:
       <label class="link">open a saved song file<input id="ss-pick" type="file" accept=".json,application/json" hidden></label> (or drop it on the library page).</p>
   </section>
 </section>

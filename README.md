@@ -3,7 +3,7 @@
 Practise Rocksmith custom songs and Songsterr tabs with standard notation and tab that follow the
 original recording.
 
-### ▶ [Open the web app: dmb1107.github.io/psarc2gp](https://dmb1107.github.io/psarc2gp/)
+### ▶ [Open the web app, tab2gp: dmb1107.github.io/psarc2gp](https://dmb1107.github.io/psarc2gp/)
 
 Free, and nothing to install. Your files never leave your computer: songs are converted inside the page and
 kept in your browser. (For a Songsterr song, only the YouTube video's ID goes out, to the service that
@@ -87,7 +87,7 @@ Set up once, on the web app's **Setup and help** page:
    conversion service, through one key shared by a few friends and locked with a password. Whoever runs
    your copy of the app gives you the password, or an invite link that enters it for you. Without it,
    everything still works: you give the app your own MP3 or M4A of the video instead.
-2. **The bookmark.** Drag the *Open in psarc2gp* button to your bookmarks bar (tried in Chrome and
+2. **The bookmark.** Drag the *Open in tab2gp* button to your bookmarks bar (tried in Chrome and
    Firefox). After unlocking the key, drag it again: then it carries the password, so the app never has
    to ask.
 
@@ -99,7 +99,7 @@ as `Artist - Title (Songsterr).gp`. Guitar Pro's *Score information* names the S
 YouTube video.
 
 - The bookmark reads only what the Songsterr page has already loaded (the song's details and the videos'
-  timings) and hands it to your psarc2gp tab, which fetches the tracks' tabs from Songsterr's file server;
+  timings) and hands it to your tab2gp tab, which fetches the tracks' tabs from Songsterr's file server;
   it never reads your Songsterr account. If the handover
   fails, its panel offers *Save the song as a file*: drop that `.json` on the app, or give it to the
   command line.

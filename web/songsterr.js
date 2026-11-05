@@ -41,7 +41,7 @@ export const isUnlocked = () => !!currentPassword();
 // it's wrong.
 export async function unlock(pw) {
   const file = await readKeyFile();
-  if (!file) throw new Error("this copy of psarc2gp has no shared audio key");
+  if (!file) throw new Error("this copy of tab2gp has no shared audio key");
   secrets = await decryptSecrets(file, pw);
   password = pw;
   store.set(pw);
@@ -83,7 +83,7 @@ export function takeInviteFromAddress() {
   let pw;
   try { pw = decodeURIComponent(m[1]); } catch { pw = m[1]; }
   return unlock(pw).then(
-    () => "Unlocked: psarc2gp can now fetch the audio of Songsterr songs in this browser.",
+    () => "Unlocked: tab2gp can now fetch the audio of Songsterr songs in this browser.",
     (e) => (e.code === "password" ? "The invite link's password doesn't open the shared audio key (it may have been changed): ask for a new link." : `Couldn't use the invite link: ${e.message}`));
 }
 
@@ -207,7 +207,7 @@ async function renderBookmarklet() {
     link.setAttribute("aria-disabled", "true");
   }
   $("ss-bookmarklet-key").textContent = isUnlocked()
-    ? "The button carries the shared key's password, so the bookmark unlocks psarc2gp in any browser it's used in. Keep it to yourself."
+    ? "The button carries the shared key's password, so the bookmark unlocks tab2gp in any browser it's used in. Keep it to yourself."
     : "If you have the shared key's password, unlock above first and then drag the button: it then carries the password, so you're never asked again.";
 }
 

@@ -160,6 +160,11 @@ Songsterr:
   `src/songsterr/audio/config.js`. The points' own lag varies per video by more than that.
 
 Web app and browser port:
+- The web app is branded **tab2gp** (the user's choice); the CLI, the repo/Pages URL and the Windows
+  integration stay psarc2gp. Internal names keep `psarc2gp` on purpose: the IndexedDB name and
+  localStorage keys (renaming them empties users' libraries and settings), the bookmarklet's message
+  types and window name (bookmarklets already in users' bookmarks would stop working), the bundle and
+  secrets `kind`s (saved files would stop opening).
 - Browsers' DecompressionStream rejects bytes after the end of a zlib stream and then drops output it
   already decoded (Chrome lost everything past 128 KiB). SNG payloads have such bytes, hence our own
   inflate (src/lib/inflate.js), which stops at the final block like zlib's Z_SYNC_FLUSH. WebCrypto has no
