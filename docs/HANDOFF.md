@@ -1,4 +1,4 @@
-# Handoff: state of the project (2026-10-27)
+# Handoff: state of the project (2026-11-05)
 
 Written at the end of the first build session and updated at the end of the second, the first on the
 user's Windows PC, for whoever picks up the work next. Product intent and decisions are in
@@ -22,6 +22,8 @@ History (see `git log`):
 7. Explorer preview pane add-in for `.gp` files (branch `windows-preview-handler`)
 8. Web app: the converter ported to run in browsers too, a library in IndexedDB, a practice player
    (2026-10-27, see "Web app")
+9. Songsterr songs as a second input: bookmarklet, conversion with the video's audio and per-bar sync,
+   in the web app and the CLI (branch `songsterr`, 2026-11-04/05, see "Songsterr")
 
 ## Evidence
 
@@ -168,6 +170,33 @@ checks are timings and alphaTab state); touch devices (selecting a passage needs
 a real chart on the live site; opening a browser-made `.gp` in Guitar Pro 8 (identical to the CLI's, so it should open);
 large libraries (hundreds of songs, several GB) against browser storage limits.
 
+## Songsterr (2026-11-05)
+
+Everything is in [SONGSTERR.md](SONGSTERR.md): what Songsterr's data looks like (findings 1–10), the
+design, and per step what was built, measured and heard. In short:
+
+- A bookmarklet on the Songsterr page hands the song and its videos' timings to the web app, which fetches
+  the tabs from Songsterr's CDN and the video's audio from a RapidAPI YouTube-to-MP3 service (one shared
+  key, encrypted in `web/songsterr-secrets.json`, unlocked by a password or an invite link), or takes the
+  user's own MP3/M4A. The CLI does the same from a saved bundle (`.json`).
+- Sync is per played bar from the chosen video's points; `src/gp/syncpoints.js` writes them in Guitar Pro
+  8's played-bar layout (needed for a repeat at bar 1).
+- Heard in GP8 by the user: UNDERWATER BOI ("sounds great"), Enter Sandman ("seems fine"), Lágrima (whole
+  recording across all 24 bars in GP8 once the sync layout was fixed). Bookmarklet handoff worked in Firefox and Chrome; Safari gets a 403
+  from Songsterr itself.
+- `tools/verify-songsterr.js` on the six saved songs in `.samples/songsterr/`: every note found, bars full,
+  sync layout right; one flag, Für Elise's pickup bar gets 1.85 s from its video (not yet listened to).
+- psarc output unchanged: `tools/snapshot.js --compare` against the baseline taken before the branch,
+  15/15 identical at every step.
+
+Drums (2026-11-05): drum tracks convert (on request, not by default) to a percussion staff with Guitar
+Pro's RSE drum kit; every drum note of the three songs with drums found by verify-songsterr; rendered
+with alphaTab; heard in time in Guitar Pro 8 (Enter Sandman, fetched audio, from the web app). A test
+with an MP3 from elsewhere sounded off by 20 ms: that file's own offset (SONGSTERR.md step 6).
+
+Not done: vocals, D.S./D.C./coda jumps (no tab with one found yet), the provider's error answers
+(401/403/429) with the real service, per-song automatic offset.
+
 ## Library sweep (2026-10-25)
 
 `node tools/sweep.js <folders>` converts every chart in memory and runs the verify.js checks. On the
@@ -279,7 +308,8 @@ In rough priority order; these are outcomes, not implementation plans.
    look at the two outlier bass tracks. Measure with `tools/sweep.js`.
 4. **Broaden the test corpus**: a guitar chart with heavy bends, a slap-bass chart, a capo chart, a Mac
    `_m.psarc`, a chart with tremolo picking. Add the `.song` exports where possible.
-5. **Lyrics / vocal melody track.**
+5. **Lyrics / vocal melody track**; for Songsterr, **vocals** (drums are done), then jumps when a tab with one
+   turns up (SONGSTERR.md, "Order of work").
 6. Remaining techniques: strum direction, let-ring, fingering.
 7. **Web app:** have the friends try the hosted site (Firefox, Safari, Mac); then let the Explorer
    preview share `web/player.js` so the two players don't drift apart.

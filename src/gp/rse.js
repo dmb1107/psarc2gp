@@ -6,7 +6,8 @@
 // the same audio engine as the audio track, so the synth stays in time with the recording. This module
 // picks an RSE sound for each arrangement and patches it into score.gpif after alphaTab has written it.
 //
-// The sound definitions are copied from files saved by Guitar Pro 8.1 (alphaTab's GP8 test files).
+// The sound definitions are copied from files saved by Guitar Pro 8.1 (alphaTab's GP8 test files); the
+// drum kit from a Guitar Pro 7 file (heard in time in Guitar Pro 8, 2026-11-05).
 
 const sound = (label, path, program, patch, pickup, effects) => ({ label, path, program, patch, pickup, effects });
 
@@ -35,6 +36,13 @@ export const SOUNDS = {
     ["E30_EqGEq", "0.121212 0.484848 0.484848 0.484848 0.484848 0.585859 0.585859 0.69697"],
     ["M07_DynamicClassicDynamic", "0.5 0.23333 0.6142"],
     ["M04_StudioReverbRoomAmbience", "1 0.43 0.4 0.5 0.2"],
+  ]),
+  // Guitar Pro 7's own drum kit (alphaTab's test-data/guitarpro7/drum-tabs.gp). The kit's pieces and their
+  // RSE samples come from the track's InstrumentSet, which alphaTab writes for percussion tracks.
+  drums: sound("Drums", "Drums/Drums/Drumkit", 0, "Drumkit-Master", 0, [
+    ["M06_DynamicAnalogDynamic", "0.42 0.14 0.39 0.38 0.7 0.4 0.72 0.5"],
+    ["M08_GraphicEQ10Band", "0 0 0.708333 0.591837 0.591837 0.55102 0.510204 0.408163 0.367347 0.387755 0.530612 0.612245 0.693878"],
+    ["M05_StudioReverbPlatePercussive", "1 0.38 0.3 0.5 0.5"],
   ]),
 };
 

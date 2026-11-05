@@ -17,6 +17,9 @@ highlights notes in time with the original recording**, with:
 They did this in ToneLib Jam, which opens `.psarc` directly but is glitchy and slow to edit in. They
 are explicitly **not** interested in Rocksmith/Guitar-Hero-style note-highway players.
 
+Many songs have no CDLC but do have a Songsterr tab, usually with a YouTube video Songsterr has timed bar
+by bar. The user wants those as the same kind of synced Guitar Pro file (added 2026-11-04).
+
 ## Solution
 
 Use **Guitar Pro 8** (which the user has bought) as the player and editor. It already has an audio
@@ -29,6 +32,11 @@ converts a `.psarc` into a Guitar Pro file that has:
 
 Primary interaction: right-click `.psarc` file(s) or a folder in Windows Explorer → **Send to →
 Guitar Pro (synced)**. A command line exists underneath for everything else.
+
+Second input: a **Songsterr song**, handed to the web app by a bookmarklet clicked on the Songsterr page
+(or saved as a `.json` for the CLI). The `.gp` gets the guitar and bass tracks, the audio of the video
+Songsterr plays, and a sync point on every played bar from that video's own timings. Details:
+[SONGSTERR.md](SONGSTERR.md).
 
 User environment: Windows PC (Guitar Pro 8, Focusrite Scarlett audio interface on ASIO) is the main
 machine; an Apple-silicon Mac is secondary.
@@ -62,11 +70,16 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 | Mac `_m.psarc` files | ◐ supported, untested |
 | Capo charts | ◐ supported, untested |
 | Preview a `.gp` in Explorer's preview pane: score, recording playing on its own, cursor following it (the user's request) | ✅ works in Explorer on the user's PC (confirmed by the user; autoplay and dark mode checked in a real Explorer window) |
+| Songsterr songs: guitar, bass and drum tracks, the video's audio embedded, a sync point on every played bar from Songsterr's timings, from the web app (bookmarklet) and the CLI (saved song) | ✅ the user heard UNDERWATER BOI and Enter Sandman in GP8 in sync; bookmarklet handoff worked in Firefox and Chrome; `tools/verify-songsterr.js` clean on six songs except one flagged pickup bar (Für Elise) |
+| Songsterr audio fetched for the user with a shared key, no installs and no hosting; their own audio file always works | ✅ fetched with the real key (RapidAPI); the provider's error answers untried |
 | Web app to share with a couple of friends: convert `.psarc` in the browser with no upload, a library kept in the browser, a player with track choice, looping, speed and a recording/synth switch (the user's request) | ◐ live at <https://dmb1107.github.io/psarc2gp/>; works in Chromium (the app's browser pane); a real chart converted only locally, not tried in Firefox/Safari, not heard by ear |
 
 ### Later (not started; ordering is a suggestion)
 
 - Lyrics / vocal melody track (every test chart has timed, pitched lyrics)
+- Songsterr vocals (notation with lyrics); D.S./D.C./coda jumps once a real tab with one turns up
+- Songsterr sync measured against the audio, per song (the points' lag varies by video, 20–110 ms on four
+  songs; `--nudge` corrects one song by ear today)
 - Strum direction, let-ring, left-hand fingering
 - A dark-mode practice view. Guitar Pro desktop has no dark score page, and OS colour inversion hides
   the playback cursor. The web app's player is one now (dark or light, synced, loop and speed), but
@@ -77,7 +90,8 @@ Status: ✅ done and verified · ◐ done, not verified on the real target · �
 
 - Note-highway / game-style playback
 - Modifying TuxGuitar or ToneLib
-- Official (purchased) Rocksmith DLC, or distributing charts, audio, or converted files
+- Official (purchased) Rocksmith DLC, or distributing charts, tabs, audio, or converted files
+- Calling Songsterr's API ourselves, or getting past its bot filter
 
 ## Quality bar (measured on six test songs, 13 arrangements)
 
@@ -108,8 +122,10 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
    Owning the converter made it testable on every song and keeps one program.
 4. **Port ww2ogg instead of shipping vgmstream.** One program, no external executables, testable
    anywhere, and a browser version stays possible.
-5. **`.psarc` is the only input.** ToneLib `.song` files are used only as a test reference for notation.
-   (To be replaced when Songsterr input is built: see [SONGSTERR.md](SONGSTERR.md).)
+5. **Two inputs: `.psarc` and Songsterr songs** (replaced 2026-11-05; it was "`.psarc` is the only
+   input"). ToneLib `.song` files are still only a test reference for notation. The Songsterr path lives
+   in `src/songsterr/` and shares only the last step (alphaTab, RSE rewrite) with the psarc path, whose
+   output stays byte-identical (checked with `tools/snapshot.js` at every step). Decisions 15–21.
 6. **Notation aims for the best practice experience, not for matching ToneLib** (the user's
    instruction). Deliberate differences, all documented in the README:
    - notes with no charted length fill to the next note but not across a bar line (ToneLib ties
@@ -158,6 +174,52 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     GitHub's noreply address instead of their email and the docs carry no personal paths. The library
     page links to CustomsForge Ignition for songs (the user's request).
 
+15. **Songsterr data comes from a bookmarklet in the user's own browser**, not from requests of ours.
+    Songsterr's API refused scripted requests after about a dozen (403 for over an hour, while a browser
+    on the same connection got through), and getting past that filter is ruled out. The page has already
+    loaded the song and the video timings; the bookmarklet copies only the song fields (the page state
+    also holds the visitor's account) and hands them to the app's tab by `postMessage`, to the app's
+    origin only. Tabs come from Songsterr's CDN, which allows other origins. A saved song (`.json`, every
+    track inside) is the fallback and the CLI's input. Userscripts (an extension to install) and framing
+    Songsterr (refused) were the alternatives.
+16. **Songsterr sync is per played bar, from the chosen video's own points, never stretched.** Songsterr
+    times bars, not beats, so the "sync point on every beat" rule (decision 2) holds for `.psarc` only.
+    Points are per played bar (repeats expanded), mapped in alphaTab's own play order so ours can't
+    differ from what alphaTab and Guitar Pro play. A video timed for another revision of the tab has the
+    wrong count and isn't offered. One exception (the user's decision): a video with exactly one point too
+    many fits when leaving out exactly one point evens out every bar and no other point does (Come As You
+    Are's default video splits bar 107 of 112 in two). With no fitting video the tab converts
+    without a recording.
+17. **The audio comes from a third-party YouTube-to-MP3 API, with one key shared by the user and friends**
+    (the user's requirements: the audio must be inside the `.gp` for Guitar Pro; nobody installs
+    anything; no hosting). Browsers can't fetch YouTube audio themselves. The key belongs to a RapidAPI
+    account used for nothing else (free plan, no card), so a leak costs at most the month's quota. It is
+    committed only encrypted (`web/songsterr-secrets.json`, PBKDF2 → AES-GCM, one simple password the
+    user chose, accepted as low risk) and decrypted only in the user's browser or CLI. Friends get the
+    password by invite link or the bookmarklet. Changing the password revokes nothing (old copies of the
+    file stay in git history): revoking means a new key. Only the video ID goes to the API, so decision
+    11 still holds. Without the password, a song converts with the user's own audio file.
+18. **Audio providers are swappable** (the user's requirement: such APIs come and go). One contract and
+    one error vocabulary for every provider; a config module lists them in fallback order with a
+    per-provider timing offset (13 ms for today's, its MP3 encoder delay); "use my own file" is always
+    last. Another API, or a small server of ours with an interface already fixed, is one provider file.
+    MP3 and M4A are embedded as delivered (Guitar Pro 8 plays both; Opus doesn't play and is refused).
+    Guitar Pro's own YouTube audio source was tried and is dead in 8.1.5 (it calls an API YouTube retired).
+19. **Songsterr output is named `Artist - Title (Songsterr).gp`.** The library's key is the file name, so
+    the plain name would collide with the `.psarc` version of the same song. Another video or revision of
+    the same song is the same name (skip / Replace as usual, with the video and revision shown).
+    Guitar Pro's Notices name the Songsterr page and the YouTube video.
+20. **Sync points are rewritten into Guitar Pro 8's own layout** for files with repeats. GP8 numbers a
+    sync point's bar by played bar and stores points in play order; alphaTab writes the written bar, which
+    GP8 misreads when a repeat starts at bar 1 (Lágrima: the whole recording squeezed into bars 1–4).
+    `src/gp/syncpoints.js` fixes it; checked in GP8 with test scores and Lágrima. psarc output has no
+    repeats and is unchanged.
+21. **No automatic per-song offset for Songsterr sync, yet.** The points' lag against the attacks varied
+    by video (+20 to +110 ms on four songs) by more than the provider's own offset; the user found the
+    measured songs fine by ear, Enter Sandman's drums included (fetched audio, 2026-11-05). `--nudge <ms>`
+    corrects one song; measuring each song needs a decoder the converter doesn't have in Node, and isn't
+    worth building until a song needs it.
+
 ## Observations from real use
 
 - The user's first converted file played correctly in Guitar Pro 8: the synth and recording are in
@@ -174,6 +236,12 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
   `<Google Drive folder>` (Google Drive for desktop), whose drive reports FAT32 and never records
   access times, so opening a song there doesn't show up. Local NTFS folders do. Offered a local folder
   instead; the user chose to keep Google Drive. Previews deliberately don't count as an access.
+
+- Songsterr (2026-11-05): UNDERWATER BOI "sounds great", repeats included; Enter Sandman "seems fine";
+  Autumn Leaves (a swing lesson video) "can't quite tell"; Lágrima was squeezed into bars 1–4 until
+  decision 20. The bookmarklet handoff worked in Firefox and Chrome. Safari gets a 403 from Songsterr's
+  own page on the user's Mac, cause unknown, so the bookmarklet never runs there; the user doesn't need
+  Safari.
 
 ## Open questions for the user
 

@@ -26,10 +26,10 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
   validateBundle(bundle);
   const indices = tracks ?? defaultTrackIndices(bundle);
   if (!indices.length) {
-    const others = bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !["drums", "vocals"].includes(trackKind(t)));
+    const others = bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => trackKind(t) !== "vocals");
     throw new Error("this song has no guitar or bass track" + (others.length
       ? `; choose tracks by number (--tracks): ${others.map(({ t, i }) => `${i} ${t.name} (${t.instrument ?? `instrument ${t.instrumentId}`})`).join(", ")}`
-      : " (drums and vocals aren't converted yet)"));
+      : " (vocals aren't converted yet)"));
   }
   const data = await loadTracks(bundle, indices, { fetch });
   const built = buildAlphaTex(bundle, data, { warn });
@@ -55,7 +55,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   const warn = (m) => { warnings.push(m); onWarning(m); };
   for (const i of tracks ?? []) {
     const kind = trackKind(bundle.song.tracks[i] ?? {});
-    if (kind === "drums" || kind === "vocals") throw new Error(`track ${i} (${bundle.song.tracks[i].name}) is ${kind}; only guitar, bass and other fretted tracks are converted so far`);
+    if (kind === "vocals") throw new Error(`track ${i} (${bundle.song.tracks[i].name}) is vocals; vocals aren't converted yet`);
   }
   const { built, score, settings, played, fitted } = await inspectSongsterr(bundle, { tracks, fetch, warn });
   const written = score.masterBars.length;

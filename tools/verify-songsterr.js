@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { convertSongsterr, inspectSongsterr } from "../src/songsterr/convert.js";
-import { defaultTrackIndices, trackKind } from "../src/songsterr/bundle.js";
+import { convertibleTrackIndices } from "../src/songsterr/bundle.js";
 import { chooseVideo } from "../src/songsterr/sync.js";
 import { readZip, entryData } from "../src/gp/zip.js";
 import { utf8 } from "../src/lib/bytes.js";
@@ -32,11 +32,10 @@ export const TEMPO = {
   plausibleBpm: [20, 400],
 };
 
-// Tracks the converter would take, and for songs without guitar or bass (piano pieces) every track that
-// isn't drums or vocals (as test/songsterr.test.js does)
+// Every track the converter can take (guitars, basses, drums, pianos, …; not vocals), so the check covers
+// more than the default selection (as test/songsterr.test.js does)
 export function tracksToCheck(bundle) {
-  if (defaultTrackIndices(bundle).length) return null;
-  return bundle.song.tracks.map((t, i) => i).filter((i) => !["drums", "vocals"].includes(trackKind(bundle.song.tracks[i])));
+  return convertibleTrackIndices(bundle);
 }
 
 export async function verifySongsterr(bundle, { video = "default", allVideos = false, tracks, fetch } = {}) {
@@ -125,9 +124,12 @@ export async function verifySongsterr(bundle, { video = "default", allVideos = f
 }
 
 // One track: Songsterr's tab JSON against the track alphaTab read back from the .gp. Notes are matched by
-// bar, voice, place in the bar (ticks; grace notes only by bar), string and fret.
+// bar, voice, place in the bar (ticks; grace notes only by bar), string and fret; drum notes by their
+// percussion articulation id (Songsterr's `fret`) instead of string and fret.
 export function checkNotes(src, track, masterBars) {
   const nStrings = track.staves[0].tuning.length;
+  const drums = track.staves[0].isPercussion;
+  const articulationId = (n) => (track.percussionArticulations[n.percussionArticulation]?.id ?? n.percussionArticulation);
   let incomplete = 0;
   let expected = 0;
   const want = new Map();
@@ -142,7 +144,7 @@ export function checkNotes(src, track, masterBars) {
         for (const n of b.notes ?? []) {
           if (n.rest) continue;
           // Songsterr string 0 = highest; alphaTab's model 1 = lowest
-          add(want, `${bi}/${vi}/${onset}/${nStrings - n.string}/${Math.max(0, Math.round(n.fret ?? 0))}`);
+          add(want, drums ? `${bi}/${vi}/${onset}/drum/${Math.round(n.fret)}` : `${bi}/${vi}/${onset}/${nStrings - n.string}/${Math.max(0, Math.round(n.fret ?? 0))}`);
           expected++;
         }
         if (!grace && Array.isArray(b.duration)) at = addFrac(at, b.duration);
@@ -154,13 +156,16 @@ export function checkNotes(src, track, masterBars) {
     bar.voices.forEach((v, vi) => {
       if (v.isEmpty) return;
       if (v.beats.reduce((s, b) => s + b.displayDuration, 0) !== length) incomplete++; // grace notes count 0
-      for (const b of v.beats) for (const n of b.notes) add(got, `${bi}/${vi}/${b.graceType !== 0 ? "g" : b.displayStart}/${n.string}/${n.fret}`);
+      for (const b of v.beats) for (const n of b.notes) {
+        const at = b.graceType !== 0 ? "g" : b.displayStart;
+        add(got, drums ? `${bi}/${vi}/${at}/drum/${articulationId(n)}` : `${bi}/${vi}/${at}/${n.string}/${n.fret}`);
+      }
     });
   });
   const diff = (a, b) => [...a].flatMap(([k, c]) => Array(Math.max(0, c - (b.get(k) ?? 0))).fill(k));
   const where = (k) => {
     const [bar, voice, at, string, fret] = k.split("/");
-    return `bar ${+bar + 1}${+voice ? ` voice ${+voice + 1}` : ""} ${at === "g" ? "grace" : `tick ${at}`} string ${string} fret ${fret}`;
+    return `bar ${+bar + 1}${+voice ? ` voice ${+voice + 1}` : ""} ${at === "g" ? "grace" : `tick ${at}`} ${string === "drum" ? `drum ${fret}` : `string ${string} fret ${fret}`}`;
   };
   const missing = diff(want, got).map(where);
   const extras = diff(got, want).map(where);

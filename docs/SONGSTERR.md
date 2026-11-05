@@ -1,6 +1,8 @@
 # Songsterr songs → synced Guitar Pro files: plan
 
-Status: **step 4 done** (2026-11-05): the bookmarklet works in Firefox and Chrome; `tools/verify-songsterr.js`
+Status: **step 5 done** (2026-11-05): README, PRODUCT.md (decision 5 replaced, 15–21 added), CLAUDE.md
+and HANDOFF.md describe the Songsterr input. **Drums built** (2026-11-05): percussion staff, RSE drum kit;
+heard in time in GP8 on Enter Sandman with fetched audio (see step 6). Next: vocals. **Step 4 done** (2026-11-05): the bookmarklet works in Firefox and Chrome; `tools/verify-songsterr.js`
 is clean on all six real bundles except one flagged first bar (see step 4). **Step 3 built** (2026-11-05): the real bookmarklet and the web app's Songsterr page (unlocking,
 invite link, songs from the bookmarklet or a saved file, tracks/video/audio choice, conversion in the worker,
 library records); checked in the browser pane with saved bundles and on Songsterr's real page, but **the
@@ -395,7 +397,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
 - Changing the library's record shape needs no IndexedDB version bump (records are schemaless and the new
   fields are optional), but the list view must cope with records that lack them.
 
-## Ground-rule changes (record in CLAUDE.md/PRODUCT.md when building)
+## Ground-rule changes (recorded in CLAUDE.md and PRODUCT.md, step 5)
 
 - **Songsterr is a second input**, read by a bookmarklet in the user's own browser; psarc2gp never calls
   Songsterr's API itself and never works around its bot filter.
@@ -569,8 +571,41 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    Safari before the bookmarklet is clicked on a loaded page, and a block caused by our requests would hit
    the other browsers on the same connection too). Not iCloud Private Relay either (turning it off didn't
    help). Cause unknown; the user doesn't need Safari, so it's left alone. Safari stays untested.
-5. README, PRODUCT.md decisions (5 replaced, 15+ added), CLAUDE.md facts and ground rules. Then drums and
-   vocals.
+5. **Done** (2026-11-05): README (Songsterr in the web app, CLI, how it works, what gets converted),
+   PRODUCT.md (problem, requirements, decision 5 replaced, decisions 15–21, observations), CLAUDE.md
+   (ground rules, layout, Songsterr facts), HANDOFF.md. Next: drums, then vocals.
+6. **Drums built** (2026-11-05). Songsterr's drum notes carry a Guitar Pro percussion articulation id in
+   `fret` (`string` −1.5 … 4.5 is only the staff place); every id in the three saved songs with drums is
+   one alphaTab 1.8.4 knows (36 kick, 38 snare, 91 rim shot, 42/92/46 hi-hat closed/half/open, 44 pedal
+   hi-hat, 41/43/45/47/48/50 toms, 49/57 crashes, 97/98 their chokes, 51 ride, 52 china). Seen on drum
+   notes: `tie`, `ghost`, `accentuated`, `staccato`; on beats the usual fields plus `graceNote` (flams).
+   score.js writes a percussion staff (`\instrument percussion`, `\clef neutral`, no tab, one
+   `\articulation (pN N)` per id used); an id alphaTab doesn't know would be left out with a warning.
+   alphaTab writes the drum kit's InstrumentSet (each piece's RSE samples); rse.js gives the track Guitar
+   Pro 7's own "Drums/Drums/Drumkit" sound (patch Drumkit-Master, from alphaTab's test file
+   guitarpro7/drum-tabs.gp; the user's GuitarPro folder has one drum track, whose sound entry is a piano
+   path, so it wasn't copied). Drums are offered but not ticked by default (the web form and `--tracks`).
+   Checked: verify-songsterr finds every drum note at its place with its id (Enter Sandman 2,183, Come As
+   You Are 1,369, UNDERWATER BOI 882), bars full; render-check (percussion clef, noteheads per piece);
+   unit tests; psarc snapshot identical (15/15). **Not yet:** heard in Guitar Pro 8 (does the RSE kit
+   play, in time with the recording, with the right pieces?) and in the web player's synth.
+   **First listen (the user, 2026-11-05): "the drums sound off beat"** (UNDERWATER BOI with the step 1 MP3
+   given as `--audio`, so no provider offset). Measured on that file against the drum tab's own hits
+   (played bars × the default video's points, linear within each bar; spectral flux per band, windows
+   512–2048): hi-hat (747 hits) and snare attacks come **18–27 ms before** the notes decoded with mpg123
+   `--no-gapless` (decoder delay kept), **41–50 ms before** with ffmpeg (gapless trim; the file has an
+   Info header, 1105-sample delay), the same at every place in the bar, so a constant offset, not drift
+   within bars. Kick is too smeared by the bass to measure. Same numbers as step 2's measurement of this
+   MP3. Drums make 20–40 ms audible where guitar hid it. Test files with `--nudge -20` and `-40` went to
+   the user. **The user: "nudge -20 sounds better"** than 0 and −40, though hard to tell exactly on this
+   song. That matches the decode that keeps the MP3 decoder delay (18–27 ms), not the trimmed one, so
+   Guitar Pro 8 most likely plays these MP3s without gapless trimming (as step 2 assumed for the
+   provider's 13 ms), and the measurement can stand in for the ear. Most of that file's offset is the file
+   itself (38 ms earlier than the provider's copy of the same video, step 2), not Songsterr's points.
+   **Enter Sandman with drums, fetched audio, from the web app: "fine"** (the user, 2026-11-05), although
+   its points measured the largest lag of the songs with drums (+40 ms before the 13 ms correction). So no
+   automatic per-song offset for now; `--nudge` for the odd song. If one is ever needed, drum hits are the
+   clearest signal to measure it with.
 
 ## Risks
 

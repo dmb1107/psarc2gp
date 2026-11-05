@@ -1,11 +1,13 @@
 # psarc2gp
 
-Practise Rocksmith custom songs with standard notation and tab that follow the original recording.
+Practise Rocksmith custom songs and Songsterr tabs with standard notation and tab that follow the
+original recording.
 
 ### ▶ [Open the web app: dmb1107.github.io/psarc2gp](https://dmb1107.github.io/psarc2gp/)
 
 Free, and nothing to install. Your files never leave your computer: songs are converted inside the page and
-kept in your browser.
+kept in your browser. (For a Songsterr song, only the YouTube video's ID goes out, to the service that
+fetches its audio; see [Songs from Songsterr](#songs-from-songsterr).)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/player-dark.png">
@@ -36,13 +38,19 @@ Each song becomes a Guitar Pro 8 file (`.gp`) with:
 - Guitar Pro's own RSE sounds for the instruments, which play in time with the recording and start muted,
   so you hear just the song until you unmute a part
 
+[Songsterr](https://www.songsterr.com/) has tabs for many more songs, most of them with a YouTube video
+whose bars Songsterr has timed. psarc2gp turns a Songsterr song into the same kind of file: its guitar,
+bass and drum tracks as notation (and tab), the video's audio as the recording, and **a sync point on every
+played bar** from Songsterr's own timings. A bookmark you click on the Songsterr page hands the song to
+the web app.
+
 Three ways to use it:
 
 | | |
 |---|---|
 | **[Web app](#the-web-app)**, any computer with a browser | convert in the page, keep a library, practise in the built-in player |
 | **[Windows + Guitar Pro 8](#guitar-pro-8-on-windows)** | right-click `.psarc` files → *Send to* → `.gp` files next to them; optional preview in Explorer |
-| **[Command line](#command-line)**, any OS with Node.js | `node bin/psarc2gp.js song.psarc` |
+| **[Command line](#command-line)**, any OS with Node.js | `node bin/psarc2gp.js song.psarc` (or a saved Songsterr song, `song.json`) |
 
 ## The web app
 
@@ -70,6 +78,38 @@ Three ways to use it:
   it; with nothing selected, Loop repeats the song. Space plays and pauses. Light and dark themes.
 - The synthesizer plays at the score's written tempo, which can differ slightly from the recording's,
   and it can't play together with the recording (an alphaTab limit). Guitar Pro can mix both.
+
+### Songs from Songsterr
+
+Set up once, on the web app's **Setup and help** page:
+
+1. **The shared audio key (optional).** The audio of a Songsterr video comes from a YouTube-to-MP3
+   conversion service, through one key shared by a few friends and locked with a password. Whoever runs
+   your copy of the app gives you the password, or an invite link that enters it for you. Without it,
+   everything still works: you give the app your own MP3 or M4A of the video instead.
+2. **The bookmark.** Drag the *Open in psarc2gp* button to your bookmarks bar (tried in Chrome and
+   Firefox). After unlocking the key, drag it again: then it carries the password, so the app never has
+   to ask.
+
+Then open a song on songsterr.com, wait for its tab to load and click the bookmark. The web app opens
+with the song: pick the tracks (guitars and basses are preselected; drums are there to tick), the video (only videos whose timings
+fit this version of the tab are offered, Songsterr's own first) and the recording (*fetch the video's
+audio for me*, *my own audio file* or *none*). It converts like a `.psarc` and lands in the same library,
+as `Artist - Title (Songsterr).gp`. Guitar Pro's *Score information* names the Songsterr page and the
+YouTube video.
+
+- The bookmark reads only what the Songsterr page has already loaded (the song's details and the videos'
+  timings) and hands it to your psarc2gp tab, which fetches the tracks' tabs from Songsterr's file server;
+  it never reads your Songsterr account. If the handover
+  fails, its panel offers *Save the song as a file*: drop that `.json` on the app, or give it to the
+  command line.
+- Sync is per bar, not per beat: Songsterr times bars, not beats. A video Songsterr timed for another
+  version of the tab doesn't fit and isn't offered; it's never stretched to fit. If no video fits, the
+  tab still converts, without a recording.
+- Drum tracks become Guitar Pro drum notation with its RSE drum kit. Vocals aren't converted yet.
+- The bookmark doesn't work in Safari (Songsterr's own page refused to load there in testing).
+
+### Browsers
 
 It works in current Chrome, Edge and Firefox. Safari needs version 18.4 or later (macOS 15.4 / iOS 18.4)
 to play the recording (Ogg Vorbis); older Safari shows the score but stays silent, so use Chrome there.
@@ -135,7 +175,7 @@ To install it, install the .NET SDK once (`winget install Microsoft.DotNet.SDK.1
 Any OS with [Node.js](https://nodejs.org) 20 or newer: run `npm install` once in this folder, then
 
 ```
-node bin/psarc2gp.js [options] <file.psarc | folder> ...
+node bin/psarc2gp.js [options] <file.psarc | folder | songsterr-song.json> ...
 
   -f, --force       overwrite an existing .gp
   -o, --out <dir>   write .gp files into this folder
@@ -146,7 +186,20 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
       --atex        also write the intermediate alphaTex (.atex) for debugging
       --pause       keep the console window open when done (used by the Send To entries)
   -q, --quiet       only print errors
+
+Songsterr songs (.json saved by the bookmark's "Save the song as a file"):
+      --audio <file>        the video's audio as MP3 or M4A; without it the audio is fetched, which
+                            needs the shared key's password (asked for, or PSARC2GP_PASSWORD)
+      --no-audio            convert the tab without a recording or sync points
+      --video <which>       default | backing | solo | playthrough | alternative | <YouTube video id>
+      --list-videos         list the song's videos and whether each fits the tab, then stop
+      --tracks <i,j,...>    tracks to convert (default: every guitar and bass track; drums by number)
+      --nudge <ms>          shift the recording for this song: positive when it sounds late
+      --audio-provider <id> fetch the audio only from this provider
 ```
+
+A Songsterr song becomes `Artist - Title (Songsterr).gp`. Folders are only searched for `.psarc` files, so
+saved songs are converted only when named.
 
 ## How it works
 
@@ -157,6 +210,16 @@ node bin/psarc2gp.js [options] <file.psarc | folder> ...
         │        (16ths, 8th/16th triplets, 32nds, 64ths), durations from sustains → alphaTex
         ├─ audio (.wem, Wwise Vorbis) ─ ww2ogg port ─ Ogg Vorbis with correct granule positions
         └─ alphaTab: alphaTex + audio + per-beat sync points → Guitar Pro 7/8 file
+```
+
+A Songsterr song takes another path into the same last step:
+
+```
+Songsterr page ─ bookmark ─ song, video timings, CDN address ─► web app (or a saved .json for the CLI)
+        ├─ tab JSON per track (Songsterr's CDN) ─ bars, repeats, rational durations, techniques → alphaTex
+        ├─ the chosen video's timings ─ one per played bar (repeats expanded, in alphaTab's play order)
+        ├─ the video's audio ─ conversion service (shared key) or your own MP3/M4A, embedded as is
+        └─ alphaTab: alphaTex + audio + per-bar sync points → .gp, sync points renumbered by played bar
 ```
 
 The same code runs in Node.js (command line, Send To) and in the browser (the web app), which is a set
@@ -201,6 +264,14 @@ Not converted (yet): lyrics/vocals, fingering, strum direction, let-ring, tone c
 convert but haven't been checked against a real capo chart. Mac (`_m.psarc`) files are supported but
 untested.
 
+From Songsterr, the tab's notation is taken as written (it already has rhythms): time signatures, tempo
+changes, sections, repeats and alternate endings, pickup bars, triplet feel, ties, slides, hammer-ons and
+pull-offs, bends, vibrato, palm mutes, let ring, dead and ghost notes, accents, staccato, harmonics, grace
+notes, tremolo bar, wah, strokes, and the tuning and key. Drum tracks become a percussion staff (each
+Songsterr drum note is a Guitar Pro drum articulation already: kick, snare, rim shot, hi-hat closed,
+half-open and open, toms, crashes, ride, …) with accents and ghost notes. Not yet: vocals, and
+D.S./D.C./coda jumps (a tab with one stops with a message; none has turned up yet).
+
 ## Development
 
 Project background, requirements and decisions: [docs/PRODUCT.md](docs/PRODUCT.md). Current state,
@@ -210,6 +281,8 @@ verification and next steps: [docs/HANDOFF.md](docs/HANDOFF.md).
 npm install
 npm test                       # unit tests; plus integration tests if ./.samples has .psarc files
 node tools/verify.js a.psarc   # bar completeness, every note present, onset error vs Rocksmith times
+node tools/verify-songsterr.js song.json   # Songsterr: bars, every note, sync layout, video vs tab tempo
+node tools/encrypt-secrets.js  # write web/songsterr-secrets.json (the shared audio key, one password)
 node tools/sweep.js folder     # the same checks on every .psarc in a folder, converted in memory
 node tools/snapshot.js a.json folder   # fingerprint the output; --compare a.json b.json after a change
 node tools/compare-tonelib.js a.psarc a.song   # notation vs a ToneLib export of the same chart
@@ -223,7 +296,8 @@ npm run build:web              # static site in dist/site
 node tools/screenshots.js .samples/*.psarc   # retake the README screenshots (headless Chrome)
 ```
 
-Charts are copyrighted, so none are in the repo. For the integration tests, put `.psarc` files (and
+Charts, Songsterr tabs and audio are copyrighted, so none are in the repo; saved Songsterr songs for the
+tests go in `.samples/songsterr/`. For the integration tests, put `.psarc` files (and
 optionally ToneLib `.song` exports with the same base name) in `.samples/`, or set `PSARC2GP_SAMPLES`.
 The README's player screenshot shows a short demo song written in `tools/screenshots.js` for that
 purpose; the library screenshot lists the songs you pass it.
@@ -240,9 +314,12 @@ src/convert.js           psarc → .gp (runs in Node and in browsers)
 src/rocksmith/           PSARC archive, SNG arrangements, song loader
 src/audio/               Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks
 src/notation/            timeline (bars, meters, sync), arrangement (quantizing, techniques), score
-src/gp/                  RSE sounds patched into the .gp, minimal zip rewrite
+src/songsterr/           Songsterr song → .gp: bundle, score (alphaTex), sync (points → played bars),
+                         audio/ (swappable providers, duration without a decoder), secrets (the key file)
+src/gp/                  RSE sounds patched into the .gp, sync points in GP8's layout, minimal zip rewrite
 src/lib/                 byte helpers, AES (CTR, CFB) and inflate in plain JavaScript
-web/                     the web app: page, conversion worker, library (IndexedDB), player
+web/                     the web app: page, conversion worker, library (IndexedDB), player, Songsterr
+                         page and bookmark, songsterr-secrets.json (encrypted)
 windows/                 Send To installer (the entries start node.exe directly)
 windows/preview/         Explorer preview pane add-in (C#, WebView2) and the page it shows (web/)
 tools/                   verification and debugging helpers
@@ -261,4 +338,5 @@ docs/images/             README screenshots (tools/screenshots.js)
 - The Explorer preview uses Microsoft Edge WebView2 (its SDK is restored from NuGet when the add-in is
   built) and shows the score with alphaTab.
 
-Convert only custom songs you have the right to use.
+Convert only songs you have the right to use, for your own practice. Saving Songsterr tabs and YouTube
+audio may go against those sites' terms; nothing of theirs is stored by this project or its site.

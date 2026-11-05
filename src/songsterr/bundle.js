@@ -72,7 +72,12 @@ export async function loadTracks(bundle, indices, { fetch = globalThis.fetch, si
   return out;
 }
 
-// Tracks converted when none are asked for: guitars and basses (drums and vocals come later).
+// Every track the converter can take (all but vocals and empty tracks), e.g. for checks.
+export function convertibleTrackIndices(bundle) {
+  return bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty && trackKind(t) !== "vocals").map(({ i }) => i);
+}
+
+// Tracks converted when none are asked for: guitars and basses (drums on request; vocals come later).
 export function defaultTrackIndices(bundle) {
   return bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty && ["guitar", "bass"].includes(trackKind(t))).map(({ i }) => i);
 }

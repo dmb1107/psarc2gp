@@ -1,13 +1,15 @@
 # psarc2gp: notes for Claude Code
 
 Converts Rocksmith 2014 CDLC (`.psarc`) into Guitar Pro 8 files with the original recording embedded
-and a sync point on every beat. The user runs it from Windows Explorer's **Send to** menu and practices
+and a sync point on every beat; and Songsterr songs (handed over by a bookmarklet, or saved as `.json`)
+into the same kind of file with the video's audio and a sync point on every played bar. The user runs it from Windows Explorer's **Send to** menu and practices
 and edits in Guitar Pro 8. The web app (`web/`) runs the same converter in a browser, with a library kept in
 the browser and a practice player; the user shares it with a couple of friends.
 
 Read before changing behaviour:
 - `docs/PRODUCT.md`: what it's for, requirements, decisions and why
 - `docs/HANDOFF.md`: current state, evidence, what's unverified, how to tell a change is good, next steps
+- `docs/SONGSTERR.md`: the Songsterr input: findings about Songsterr's data, design, what was measured
 - `README.md`: user-facing usage and the notation choices
 
 ## Commands
@@ -41,7 +43,11 @@ src/rocksmith/      PSARC archive, SNG arrangement parser, song loader
 src/audio/          Wwise → Ogg (ww2ogg port), Ogg page writer, packed codebooks (BSD, keep the license file)
 src/notation/       timeline (bars, meters, count-in, sync points), arrangement (grid choice, durations,
                     techniques), score (assembles alphaTex)
-src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
+src/songsterr/      Songsterr song → .gp: bundle.js (format, validation, CDN, names), score.js (tab JSON →
+                    alphaTex), sync.js (points → played bars, video choice), convert.js, secrets.js
+                    (encrypted key file), audio/ (providers in config.js order, errors, MP3/M4A duration)
+src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), sync points in GP8's
+                    played-bar layout (syncpoints.js), zip rewrite (zip.js)
 src/lib/            Uint8Array helpers, AES-256 CTR/CFB and inflate in plain JS (tested against node:crypto/zlib)
 web/                the web app: index.html + app.js (library view, conversion queue, routing),
                     convert-worker.js (src/convert.js and src/songsterr/ in a module worker), library.js
@@ -59,15 +65,27 @@ test/               node:test; samples.test.js uses real charts from .samples/
 ## Ground rules
 
 - **Sync accuracy comes first.** Every chart beat gets a sync point. Don't trade that for notation
-  convenience. Measure with `tools/verify.js`.
+  convenience. Measure with `tools/verify.js`. For Songsterr: every played bar gets a sync point from the
+  chosen video's own points (Songsterr times bars, not beats), never stretched to fit; a video whose
+  count doesn't fit isn't used. Measure with `tools/verify-songsterr.js`.
+- **Never call Songsterr's API ourselves** or work around its bot filter. Its data comes from the
+  bookmarklet in the user's browser (page state, browser cache) or a saved bundle; its CDN is fine.
+- **Don't break psarc.** Songsterr code lives in `src/songsterr/`; `src/convert.js` and `src/notation/`
+  don't change for it. After a change: `tools/snapshot.js --compare` against a baseline, every song
+  identical (docs/SONGSTERR.md, "Don't break psarc").
 - **Never overwrite** an existing `.gp` by default; users edit those files in Guitar Pro.
-- **No copyrighted material in git**: charts, audio, converted `.gp` files. Samples live in `.samples/`.
+- **No copyrighted material in git**: charts, Songsterr tabs and bundles, audio, converted `.gp` files.
+  Samples live in `.samples/` (saved Songsterr songs in `.samples/songsterr/`).
+- **Secrets only encrypted**: the shared audio key is committed only inside `web/songsterr-secrets.json`
+  (written by `tools/encrypt-secrets.js`); never in plain text, a log, a test or a build secret.
 - **The repo is public** (GitHub Pages). Keep the user's email, Windows user name and personal folder paths
   out of tracked files and commit metadata; write `%USERPROFILE%\...` or a placeholder.
 - The converter: one runtime (Node ≥ 20), one pinned dependency (alphaTab), no native tools, and the same
   code runs in browsers (the web app). Keep `src/` platform-neutral: Uint8Array/DataView, not Buffer; no
   `node:` imports (the one exception, ww2ogg's codebook load, picks fs or fetch by URL scheme).
 - The web app never uploads anything: conversion runs in the page, songs live in the browser's IndexedDB.
+  The one outgoing request with user intent is a YouTube video ID to the audio provider (and the
+  provider's download), for Songsterr songs only; never a chart, tab or account data.
   Keep it a static site (no server code), so nobody hosting it ever handles charts or recordings. The optional Explorer preview
   (windows/preview) is the one native part (the user's decision): keep it separate from the converter.
 - Notation should give the best practice experience, not mimic ToneLib; when you deviate from ToneLib,
@@ -112,6 +130,30 @@ test/               node:test; samples.test.js uses real charts from .samples/
   can come first in the archive.
 - Some charts aren't on their own beat grid (notes 15–30 ms off the nearest 16th). verify.js then
   reports p95 onset errors of 10–30 ms; that's the chart, not a regression (see HANDOFF.md).
+
+Songsterr:
+- Songsterr string 0 is the **highest** string (alphaTex string = Songsterr + 1); tunings are listed high
+  to low as MIDI numbers. Durations are rationals; `type`/`dots`/`tuplet` are the written value.
+- Video points are bar start times per **played** bar (repeats expanded, alternate endings on their pass),
+  with no end point for the last bar. Map them in alphaTab's own play order (`playedBars` in sync.js reads
+  its MIDI generator), not an order of our own.
+- Many listed videos were timed for older revisions and don't fit (wrong count); not even the default
+  always fits. A negative first point means the video starts after the tab (positive FramePadding).
+- The page state (`<script id="state">`) also holds the signed-in visitor's account: the bookmarklet copies
+  song fields only.
+- Changing the secrets password revokes nothing (old versions of the file stay in git history with the
+  old password): revoke by rotating the key at the provider.
+- Output is `Artist - Title (Songsterr).gp`: library keys are file names, so the plain name would collide
+  with the psarc version of the same song.
+- A drum note's `fret` is a Guitar Pro percussion articulation id (mostly the GM drum number; 91–98 are
+  GP's extras, e.g. 92 half-open hi-hat), `string` only its staff place. alphaTex names articulations
+  (`\articulation (p42 42)`, then `p42.8`); names like `a36` or `d38` parse as pitches. alphaTab gives a
+  percussion staff a treble clef unless told `\clef neutral`. `DRUM_ARTICULATIONS` in score.js is
+  alphaTab 1.8.4's id list (not exported; a test reads it from alphaTab's error text): re-check on upgrade.
+- An unknown bar field stops the conversion (it might change the play order, e.g. a D.S. or coda, none
+  seen yet): add it to SONGSTERR.md finding 8 and map it, don't skip it.
+- The provider's MP3s have no gapless header, so their 13 ms encoder delay plays: `offsets` in
+  `src/songsterr/audio/config.js`. The points' own lag varies per video by more than that.
 
 Web app and browser port:
 - Browsers' DecompressionStream rejects bytes after the end of a zlib stream and then drops output it

@@ -270,7 +270,7 @@ async function openBundle(bundle, from) {
     if (other >= 0) pick.push(other);
   }
   if (!pick.length) {
-    me.error = "none of this song's tracks can be converted yet (drums and vocals come later)";
+    me.error = "none of this song's tracks can be converted yet (vocals come later)";
     me.inspecting = false;
     renderSong();
     return;
@@ -287,7 +287,7 @@ async function openBundle(bundle, from) {
   renderSong();
 }
 
-const convertible = (t) => !t.isEmpty && !["drums", "vocals"].includes(trackKind(t));
+const convertible = (t) => !t.isEmpty && trackKind(t) !== "vocals";
 
 function renderSong() {
   if (!ask) return;
@@ -307,7 +307,7 @@ function renderSong() {
   const defaults = new Set(defaultTrackIndices(c.bundle));
   if (tracksShownFor !== c) $("ss-tracks").replaceChildren(...song.tracks.map((t, i) => {
     const ok = convertible(t);
-    const why = t.isEmpty ? "empty" : trackKind(t) === "drums" ? "drums: not yet" : trackKind(t) === "vocals" ? "vocals: not yet" : "";
+    const why = t.isEmpty ? "empty" : trackKind(t) === "vocals" ? "vocals: not yet" : "";
     return el("label", { className: `check${ok ? "" : " off"}` },
       el("input", { type: "checkbox", name: "track", value: String(i), checked: ok && (defaults.has(i) || (!defaults.size && i === song.tracks.findIndex(convertible))), disabled: !ok }),
       el("span", { textContent: t.name || `Track ${i + 1}` }),

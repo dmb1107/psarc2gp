@@ -33,6 +33,7 @@ const KEYS = ["cb", "gb", "db", "ab", "eb", "bb", "f", "c", "g", "d", "a", "e", 
 export function soundFor(meta) {
   const kind = trackKind(meta);
   if (kind === "bass") return "bass";
+  if (kind === "drums") return "drums";
   const p = meta.instrumentId;
   if (p === 30) return "distortion";
   if (p === 29) return "overdrive";
@@ -143,6 +144,34 @@ function slideEffects(slide, stats) {
 
 const HARMONICS = { natural: "nh", artificial: "ah", pinch: "ph", tap: "th", semi: "sh", feedback: "fh" };
 
+// Drums: Songsterr stores a drum note's instrument in `fret` as a Guitar Pro percussion articulation id
+// (mostly the General MIDI drum number; 91–98 are Guitar Pro's extra ones: 92 half-open hi-hat, 91 snare
+// rim shot, 97/98 crash choke), with `string` the staff position. The ids alphaTab 1.8.4 knows
+// (PercussionMapper.instrumentArticulations, not exported; test/songsterr.test.js checks this list
+// against alphaTab). alphaTex names notes, not numbers, so each id used gets `\articulation (pN N)`.
+export const DRUM_ARTICULATIONS = new Set([
+  29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
+  56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
+  82, 83, 84, 85, 86, 87, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108,
+  109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 122, 123, 124, 125, 126, 127,
+]);
+const DRUM_NOTE_FIELDS = new Set(["fret", "string", "tie", "ghost", "accentuated", "staccato", "rest"]);
+
+function drumNoteTex(n, stats, used) {
+  const id = Math.round(n.fret);
+  if (!DRUM_ARTICULATIONS.has(id)) { stats.unsupported.add(`drum note ${n.fret}`); stats.skippedDrums++; return null; }
+  used.add(id);
+  const eff = [];
+  if (n.tie) eff.push("t");
+  if (n.ghost) eff.push("g");
+  if (n.accentuated === 2) eff.push("hac");
+  else if (n.accentuated) eff.push("ac");
+  if (n.staccato) eff.push("st");
+  for (const k of Object.keys(n)) if (!DRUM_NOTE_FIELDS.has(k)) stats.unsupported.add(k);
+  stats.notes++;
+  return `p${id}${eff.length ? `{${eff.join(" ")}}` : ""}`;
+}
+
 function noteTex(n, beat, nStrings, stats) {
   const string = n.string + 1; // Songsterr 0 = highest string; alphaTex 1 = highest
   if (!(string >= 1 && string <= nStrings)) { stats.skippedNotes++; return null; }
@@ -181,7 +210,7 @@ const BEAT_FIELDS = new Set(["notes", "type", "duration", "dots", "tuplet", "tup
   "wahwah", "vibrato", "vibratoWithTremoloBar", "chord"]);
 const DYNAMICS = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"]);
 
-function beatTex(beat, nStrings, stats, where, state) {
+function beatTex(beat, noteOf, stats, where, state) {
   const { dur, eff } = valueOf(beat, where);
   if (beat.graceNote) eff.push(beat.graceNote === "onBeat" ? "gr ob" : "gr bb");
   if (beat.velocity && DYNAMICS.has(beat.velocity) && beat.velocity !== state.dynamics) {
@@ -206,7 +235,7 @@ function beatTex(beat, nStrings, stats, where, state) {
   for (const k of Object.keys(beat)) if (!BEAT_FIELDS.has(k)) stats.unsupported.add(k);
   const effTex = eff.length ? `{${eff.join(" ")}}` : "";
 
-  const notes = (beat.notes ?? []).filter((n) => !n.rest).map((n) => noteTex(n, beat, nStrings, stats)).filter(Boolean);
+  const notes = (beat.notes ?? []).filter((n) => !n.rest).map(noteOf).filter(Boolean);
   if (!notes.length) {
     if (beat.graceNote) return ""; // a grace "rest" means nothing
     return `r.${dur}${effTex}`;
@@ -232,20 +261,27 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
   const names = new Map();
   tracks.forEach((t, ti) => {
     const kind = trackKind(t.meta);
-    const tuning = t.data.tuning ?? t.meta.tuning;
-    if (!Array.isArray(tuning) || !tuning.length) throw new Error(`${t.meta.name}: no tuning (drums and vocals aren't converted yet)`);
+    if (kind === "vocals") throw new Error(`${t.meta.name}: vocals aren't converted yet`);
+    const drums = kind === "drums";
+    const tuning = drums ? [] : t.data.tuning ?? t.meta.tuning;
+    if (!drums && (!Array.isArray(tuning) || !tuning.length)) throw new Error(`${t.meta.name}: no tuning`);
     const nStrings = tuning.length;
+    const usedDrums = new Set();
     const sound = soundFor(t.meta);
     const base = t.meta.name || t.data.name || `Track ${t.index + 1}`;
     names.set(base, (names.get(base) ?? 0) + 1);
     const name = names.get(base) > 1 ? `${base} ${names.get(base)}` : base;
-    const stats = { notes: 0, graceNotes: 0, skippedNotes: 0, unsupported: new Set(), badBars: [] };
+    const stats = { notes: 0, graceNotes: 0, skippedNotes: 0, skippedDrums: 0, unsupported: new Set(), badBars: [] };
     lines.push(`\\track ${q(name)}`);
-    lines.push("\\staff {score tabs}");
-    lines.push(`\\tuning (${tuning.map(pitchName).join(" ")})`);
-    lines.push(`\\instrument ${Math.max(0, Math.min(127, t.meta.instrumentId ?? 27))}`);
+    // drums: a percussion staff (no tab); the articulation names are declared once the notes are known
+    const articulationLine = drums ? lines.push("\\staff {score}", "\\instrument percussion", "") - 1 : -1;
+    if (!drums) {
+      lines.push("\\staff {score tabs}");
+      lines.push(`\\tuning (${tuning.map(pitchName).join(" ")})`);
+      lines.push(`\\instrument ${Math.max(0, Math.min(127, t.meta.instrumentId ?? 27))}`);
+    }
     if (kind === "guitar" || kind === "bass") lines.push("\\displaytranspose 12");
-    const capo = t.data.capo ?? t.meta.capo;
+    const capo = drums ? 0 : t.data.capo ?? t.meta.capo;
     if (capo > 0) lines.push(`\\capo ${capo}`);
 
     const nVoices = Math.max(...t.data.measures.map((m) => m.voices?.length ?? 0));
@@ -257,10 +293,11 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
         const bar = bars[mi];
         const meta = [];
         if (vi === 0) {
-          const clef = CLEFS[m.clef];
-          if (m.clef !== undefined && !clef) stats.unsupported.add(`clef ${m.clef}`);
+          const clef = drums ? undefined : CLEFS[m.clef]; // a percussion staff keeps alphaTab's own clef
+          if (m.clef !== undefined && !clef && !drums) stats.unsupported.add(`clef ${m.clef}`);
           if (clef) meta.push(`\\clef ${clef}`);
           else if (mi === 0 && kind === "bass") meta.push("\\clef bass");
+          else if (mi === 0 && drums) meta.push("\\clef neutral"); // alphaTab gives a percussion staff a treble clef
           if (ti === 0) {
             if (mi === 0 && bars.anacrusis) meta.push("\\ac");
             if (bar.tsChange) meta.push(`\\ts (${bar.num} ${bar.den})`);
@@ -280,7 +317,8 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
         let beats = [];
         let len = [0, 1];
         for (const [bi, b] of (voice?.beats ?? []).entries()) {
-          const tex = beatTex(b, nStrings, stats, `${name}, bar ${mi + 1}, beat ${bi + 1}`, state);
+          const noteOf = drums ? (n) => drumNoteTex(n, stats, usedDrums) : (n) => noteTex(n, b, nStrings, stats);
+          const tex = beatTex(b, noteOf, stats, `${name}, bar ${mi + 1}, beat ${bi + 1}`, state);
           if (tex) beats.push(tex);
           if (!b.graceNote && Array.isArray(b.duration)) len = addFrac(len, b.duration);
         }
@@ -298,12 +336,14 @@ export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
       });
       lines.push(body.join(" |\n"));
     }
+    if (drums) lines[articulationLine] = [...usedDrums].sort((a, b) => a - b).map((id) => `\\articulation (p${id} ${id})`).join(" ");
+    if (stats.skippedDrums) warn(`${name}: ${stats.skippedDrums} drum note(s) of kinds alphaTab doesn't know were left out`);
     if (stats.badBars.length) warn(`${name}: ${stats.badBars.length} bar(s) don't add up to their time signature (bar ${stats.badBars.slice(0, 5).join(", ")})`);
     if (stats.skippedNotes) warn(`${name}: ${stats.skippedNotes} note(s) on strings the tuning doesn't have were left out`);
     if (stats.unsupported.size) warn(`${name}: not converted: ${[...stats.unsupported].join(", ")}`);
     reports.push({
       name, kind, index: t.index, notes: stats.notes, graceNotes: stats.graceNotes, sound,
-      tuning: [...tuning].reverse().map(pitchName).join(" "), // lowest first, as psarc reports it
+      tuning: drums ? "" : [...tuning].reverse().map(pitchName).join(" "), // lowest first, as psarc reports it
     });
   });
   return { tex: lines.join("\n") + "\n", bars, tracks: reports };

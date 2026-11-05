@@ -7,8 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
-import { validateBundle, loadTracks, defaultTrackIndices, trackUrl, trackKind, songsterrLink } from "../src/songsterr/bundle.js";
-import { buildAlphaTex } from "../src/songsterr/score.js";
+import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
+import { buildAlphaTex, DRUM_ARTICULATIONS } from "../src/songsterr/score.js";
 import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
@@ -304,14 +304,84 @@ test("convert: tracks fetched from the CDN when the bundle doesn't carry them", 
   assert.equal(trackUrl(b, 3), "https://cdn.example/1/2/v0-abc/3.json");
 });
 
-test("drums and vocals are not converted yet; default tracks are guitars and basses", async () => {
+// a drum track as Songsterr stores it: no tuning, `fret` = percussion articulation id, `string` = staff place
+const drumTrack = (measures, extra = {}) => ({ name: "Drums", instrumentId: 1024, strings: 6, songId: 1, revisionId: 2,
+  automations: { tempo: [{ measure: 0, position: 0, bpm: 120, type: 4 }] }, measures, ...extra });
+const drumBar = () => bar([
+  beat(8, [note(36, 4.5), note(42, -0.5)]), beat(8, [note(42, -0.5, { accentuated: 1 })]),
+  beat(8, [note(38, 1.5, { ghost: true }), note(92, -0.5)]), beat(8, [note(42, -0.5)]),
+  beat(4, [note(36, 4.5), note(49, -1)]), beat(4, [note(38, 1.5)]),
+]);
+
+test("vocals are not converted yet; default tracks are guitars and basses, drums on request", async () => {
   const g = track([restBar()], { name: "Gtr", instrumentId: 30, tuning: [64, 59, 55, 50, 45, 40] });
   const metas = [{ name: "Vox", isVocalTrack: true, instrumentId: 54 }, { name: "Gtr", instrumentId: 30 }, { name: "Drums", instrumentId: 1024, isDrums: true }];
-  const b = bundle([null, g, null], [video([0])], metas);
+  const b = bundle([null, g, drumTrack([restBar()])], [video([0])], metas);
   assert.deepEqual(defaultTrackIndices(b), [1]);
-  await assert.rejects(convertSongsterr(b, { tracks: [2] }), /is drums/);
+  assert.deepEqual(convertibleTrackIndices(b), [1, 2]);
+  await assert.rejects(convertSongsterr(b, { tracks: [0] }), /is vocals/);
   const r = await convertSongsterr(b, {});
   assert.equal(r.report.tracks[0].sound, "distortion");
+  const d = await convertSongsterr(b, { tracks: [1, 2] });
+  assert.deepEqual(d.report.tracks.map((t) => t.sound), ["distortion", "drums"]);
+});
+
+test("drums: a percussion staff, notes by articulation id with accents and ghosts", () => {
+  const t = drumTrack([drumBar(), drumBar()]);
+  const meta = { name: "Drums", instrumentId: 1024, isDrums: true };
+  const { tex, tracks } = buildAlphaTex(bundle([t], [], [meta]), [{ index: 0, meta, data: t }]);
+  assert.match(tex, /\\instrument percussion/);
+  assert.match(tex, /\\articulation \(p36 36\) \\articulation \(p38 38\) \\articulation \(p42 42\) \\articulation \(p49 49\) \\articulation \(p92 92\)/);
+  assert.doesNotMatch(tex, /\\tuning|displaytranspose/);
+  assert.equal(tracks[0].notes, 18);
+  const { score } = load(tex);
+  const staff = score.tracks[0].staves[0];
+  assert.ok(staff.isPercussion);
+  assert.equal(staff.bars[0].clef, alphaTab.model.Clef.Neutral);
+  const ids = (b) => b.notes.map((n) => score.tracks[0].percussionArticulations[n.percussionArticulation].id);
+  const beats = staff.bars[0].voices[0].beats;
+  assert.deepEqual(beats.map(ids), [[36, 42], [42], [38, 92], [42], [36, 49], [38]]);
+  assert.equal(beats[1].notes[0].accentuated, alphaTab.model.AccentuationType.Normal);
+  assert.ok(beats[2].notes[0].isGhost);
+  assert.equal(beats.reduce((a, x) => a + x.displayDuration, 0), score.masterBars[0].calculateDuration());
+});
+
+test("drums: an id alphaTab doesn't know is left out with a warning; the list matches alphaTab", () => {
+  const t = drumTrack([bar([beat(2, [note(36, 4.5), note(21, 0)]), beat(2, [note(38, 1.5)])])]);
+  const meta = { name: "Drums", instrumentId: 1024, isDrums: true };
+  const warnings = [];
+  const { tex, tracks } = buildAlphaTex(bundle([t], [], [meta]), [{ index: 0, meta, data: t }], { warn: (w) => warnings.push(w) });
+  assert.equal(tracks[0].notes, 2);
+  assert.ok(warnings.some((w) => /1 drum note/.test(w)), warnings.join("; "));
+  load(tex);
+  // our list is alphaTab's (it doesn't export its table, but an unknown id's error lists every known one)
+  let known = null;
+  const level = alphaTab.Logger.logLevel;
+  alphaTab.Logger.logLevel = alphaTab.LogLevel.None; // the error is the point here
+  try { alphaTab.importer.ScoreLoader.loadAlphaTex(`\\track "D" \\instrument percussion \\articulation (p0 0) r.1 |`, new alphaTab.Settings()); } catch (e) {
+    const m = e.semanticDiagnostics.items.map((d) => d.message.match(/expected: ([\d,]+)/)).find(Boolean);
+    known = new Set(m[1].split(",").map(Number));
+  } finally {
+    alphaTab.Logger.logLevel = level;
+  }
+  assert.deepEqual([...known].sort((a, b) => a - b), [...DRUM_ARTICULATIONS].sort((a, b) => a - b));
+});
+
+test("drums: the .gp has Guitar Pro's RSE drum kit and plays on the percussion channel", async () => {
+  const g = track([bar([beat(1, [note(5, 3)])]), bar([beat(1, [note(7, 3)])])]);
+  const metas = [{ name: "Bass", instrumentId: 34, isBassGuitar: true }, { name: "Drums", instrumentId: 1024, isDrums: true }];
+  const b = bundle([g, drumTrack([drumBar(), drumBar()])], [video([0, 2])], metas);
+  const r = await convertSongsterr(b, { tracks: [0, 1] });
+  const gpif = new TextDecoder().decode(await unzipEntry(r.gp, "Content/score.gpif"));
+  const drums = gpif.match(/<Track id="1">[\s\S]*?<\/Track>/)[0];
+  assert.match(drums, /<Type>drumKit<\/Type>/);
+  assert.match(drums, /<Path>Drums\/Drums\/Drumkit<\/Path>/);
+  assert.match(drums, /<SoundbankPatch>Drumkit-Master<\/SoundbankPatch>/);
+  assert.match(drums, /<AudioEngineState>RSE<\/AudioEngineState>/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.ok(back.tracks[1].staves[0].isPercussion);
+  assert.equal(back.tracks[1].playbackInfo.primaryChannel, 9);
+  assert.equal(back.tracks[1].staves[0].bars[0].voices[0].beats.flatMap((x) => x.notes).length, 9);
 });
 
 test("bundle validation", () => {
@@ -451,8 +521,8 @@ const real = fs.existsSync(samples) ? fs.readdirSync(samples).filter((f) => f.en
 for (const f of real) {
   test(`real bundle ${f}: every bar complete, one sync point per played bar`, async () => {
     const b = JSON.parse(fs.readFileSync(path.join(samples, f), "utf8"));
-    // songs without guitar or bass (piano pieces): every track that isn't drums or vocals
-    const tracks = defaultTrackIndices(b).length ? null : b.song.tracks.map((t, i) => i).filter((i) => !["drums", "vocals"].includes(trackKind(b.song.tracks[i])));
+    // every track the converter takes (guitars, basses, drums, pianos; not vocals)
+    const tracks = convertibleTrackIndices(b);
     const r = await convertSongsterr(b, { tracks });
     // a tab no video fits (all synced to other revisions) converts without sync points
     assert.equal(r.report.syncPoints, r.report.video ? r.report.playedBars + 1 : 0);
