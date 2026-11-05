@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
-import { validateBundle, loadTracks, defaultTrackIndices, trackUrl, trackKind } from "../src/songsterr/bundle.js";
+import { validateBundle, loadTracks, defaultTrackIndices, trackUrl, trackKind, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex } from "../src/songsterr/score.js";
 import { playedBars, chooseVideo, syncFromPoints } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
@@ -278,6 +278,24 @@ test("bundle validation", () => {
 test("output name: suffix keeps it apart from the .psarc version; unsafe characters removed", () => {
   assert.equal(songsterrOutputName({ artist: 'AC/DC', title: 'T.N.T. "live"?' }), "ACDC - T.N.T. live (Songsterr).gp");
   assert.equal(songsterrOutputName({}), "Unknown - Untitled (Songsterr).gp");
+});
+
+test("the .gp names its Songsterr page and video in Guitar Pro's Notices", async () => {
+  const g = track([restBar(), restBar()], { name: "Gtr", instrumentId: 30, tuning: [64, 59, 55, 50, 45, 40] });
+  const b = bundle([g], [video([0, 2], { videoId: "Pb7-ICi-r8Y" }), video([1, 3], { videoId: "KBlpI7YLuKs", feature: "backing" })]);
+  b.page = "https://www.songsterr.com/a/wsa/x-bass-tab-s1?utm=y#bar5";
+  assert.equal(songsterrLink(b), "https://www.songsterr.com/a/wsa/x-bass-tab-s1");
+  const r = await convertSongsterr(b, {});
+  assert.equal(r.meta.link, "https://www.songsterr.com/a/wsa/x-bass-tab-s1");
+  const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.equal(score.notices, "Tab: https://www.songsterr.com/a/wsa/x-bass-tab-s1 (revision 2)\nRecording and sync: https://www.youtube.com/watch?v=Pb7-ICi-r8Y");
+  const backing = await convertSongsterr(b, { video: "backing" });
+  assert.match(alphaTab.importer.ScoreLoader.loadScoreFromBytes(backing.gp, new alphaTab.Settings()).notices, /v=KBlpI7YLuKs \(backing\)$/);
+  // no page, or someone else's: the canonical address from the id
+  for (const page of [undefined, "https://evil.example/a/wsa/x-s1", "https://www.songsterr.com/a/wsa/other-s99"]) {
+    assert.equal(songsterrLink({ page, song: { songId: 514895, artist: "Turnstile", title: "UNDERWATER BOI" } }), "https://www.songsterr.com/a/wsa/turnstile-underwater-boi-tab-s514895");
+  }
+  assert.equal(songsterrLink({ song: { songId: 7, artist: "Beyoncé", title: "Déjà Vu!" } }), "https://www.songsterr.com/a/wsa/beyonce-deja-vu-tab-s7");
 });
 
 // ---- audio duration (synthetic files: frame headers and boxes written here, no real audio)

@@ -84,3 +84,32 @@ export function trackKind(meta) {
   if (meta.isGuitar || (meta.instrumentId >= 24 && meta.instrumentId <= 31)) return "guitar";
   return "other";
 }
+
+const clean = (s) => String(s ?? "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim();
+
+// "Artist - Title (Songsterr).gp": the suffix keeps it apart from a .psarc version of the same song
+// (the web library keys songs by file name, and the CLI skips existing files)
+export function songsterrOutputName(song) {
+  return `${clean(song.artist) || "Unknown"} - ${clean(song.title) || "Untitled"} (Songsterr).gp`;
+}
+
+// The Songsterr page the song came from: the one the bookmarklet read (bundle.page, without its query
+// and fragment), else the song's canonical address, built from its id.
+export function songsterrLink(bundle) {
+  const s = bundle.song;
+  try {
+    const u = new URL(bundle.page);
+    if (u.protocol === "https:" && /(^|\.)songsterr\.com$/.test(u.hostname) && u.pathname.includes(`-s${s.songId}`)) return `${u.origin}${u.pathname}`;
+  } catch { /* no page, or not a URL */ }
+  const slug = (x) => String(x ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `https://www.songsterr.com/a/wsa/${[slug(s.artist), slug(s.title), "tab"].filter(Boolean).join("-")}-s${s.songId}`;
+}
+
+// Guitar Pro's "Notices" (File > Score information): where the tab and the recording came from.
+export function songsterrNotices(bundle, video) {
+  const s = bundle.song;
+  return [
+    `Tab: ${songsterrLink(bundle)} (revision ${s.revisionId})`,
+    video && `Recording and sync: https://www.youtube.com/watch?v=${video.videoId}${video.feature && video.feature !== "default" ? ` (${video.feature})` : ""}`,
+  ].filter(Boolean).join("\n");
+}

@@ -179,3 +179,42 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 .at-cursor-beat { background: var(--accent); width: 2px; }
 .at-selection div { background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .at-highlight * { fill: var(--accent); stroke: var(--accent); }
+
+/* ---------------------------------------------------------------------------------- songsterr */
+#nav-songsterr { margin-left: auto; text-decoration: none; color: var(--fg); }
+#nav-songsterr + #theme { margin-left: 0; }
+.notice {
+  margin: 0; padding: 8px 16px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-bottom: 1px solid var(--line);
+}
+.ss-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
+.ss-box { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+.ss-box.error { color: var(--danger); }
+#ss-waiting { display: flex; align-items: center; gap: 10px; }
+#ss-waiting[hidden] { display: none; }
+#ss-byline { margin: 2px 0 6px; }
+.muted, .note { color: var(--muted); }
+.note { font-size: 12.5px; margin: 4px 0 0; }
+.note:empty { display: none; }
+fieldset { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
+legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
+.check { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
+.check input { accent-color: var(--accent); margin: 0; flex: none; transform: translateY(1px); }
+.check .muted { font-size: 12.5px; }
+.check.off { opacity: 0.55; }
+#ss-video { max-width: 100%; }
+.indent { margin: 2px 0 6px 24px; }
+.indent input[type="password"], .row input[type="password"] {
+  font: inherit; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin-left: 6px;
+}
+.ss-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 0; }
+.ss-actions .note { margin: 0; font-size: inherit; }
+.steps { padding-left: 22px; margin: 8px 0; }
+.steps li { margin-bottom: 8px; }
+.bookmarklet { cursor: grab; text-decoration: none; margin-left: 6px; }
+.bookmarklet[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+.ss-key { margin-top: 26px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+label.link { cursor: pointer; padding: 0; }

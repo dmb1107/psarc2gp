@@ -12,17 +12,19 @@
 <body>
 <header class="appbar">
   <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">psarc2gp</a>
-  <span class="tagline">Rocksmith songs to Guitar Pro, synced to the recording</span>
+  <span class="tagline">Rocksmith and Songsterr songs to Guitar Pro, synced to the recording</span>
+  <a id="nav-songsterr" class="button quiet" href="#/songsterr">From Songsterr</a>
   <button id="theme" class="quiet" type="button" title="Colour theme">Theme: system</button>
 </header>
+<p id="notice" class="notice" role="status" hidden><span id="notice-text"></span> <button id="notice-close" class="link" type="button">OK</button></p>
 
 <section id="library-view" class="page" aria-label="Library">
   <div id="drop" class="drop">
     <p class="drop-title">Drop Rocksmith <b>.psarc</b> files or a folder here</p>
     <p class="drop-sub">Each song becomes a Guitar Pro 8 file with the original recording and a sync point on every beat. You can also add <b>.gp</b> files.</p>
-    <p class="drop-sub">Need songs? Find Rocksmith custom songs on <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge Ignition</a>.</p>
+    <p class="drop-sub">Need songs? Find Rocksmith custom songs on <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge Ignition</a>, or bring tabs <a href="#/songsterr">from Songsterr</a>.</p>
     <div class="drop-actions">
-      <label class="button primary">Choose files<input id="pick-files" type="file" accept=".psarc,.gp" multiple hidden></label>
+      <label class="button primary">Choose files<input id="pick-files" type="file" accept=".psarc,.gp,.json" multiple hidden></label>
       <label class="button">Choose a folder<input id="pick-folder" type="file" webkitdirectory hidden></label>
     </div>
     <p class="private">Your files stay on this computer. Conversion runs inside this page and songs are kept in this browser's storage; nothing is uploaded.</p>
@@ -51,6 +53,73 @@
     <p id="empty" class="empty" hidden>No songs yet. Converted songs appear here.</p>
   </section>
   <footer id="storage" class="storage"></footer>
+</section>
+
+<section id="songsterr-view" class="page" aria-label="Songs from Songsterr" hidden>
+  <div class="ss-head">
+    <a class="back" href="#/" title="Back to the library">&larr; Library</a>
+    <h1>Songs from Songsterr</h1>
+  </div>
+
+  <p id="ss-waiting" class="ss-box" hidden><span class="spinner"></span> Receiving the song from the Songsterr tab…</p>
+  <p id="ss-error" class="ss-box error" hidden></p>
+
+  <form id="ss-form" class="ss-box" hidden>
+    <h2 id="ss-title"></h2>
+    <p id="ss-byline" class="muted"></p>
+    <fieldset>
+      <legend>Tracks</legend>
+      <div id="ss-tracks" class="checks"></div>
+      <p id="ss-tracks-note" class="note"></p>
+    </fieldset>
+    <fieldset>
+      <legend>Video</legend>
+      <select id="ss-video" aria-label="Video"></select>
+      <p id="ss-video-note" class="note"></p>
+    </fieldset>
+    <fieldset>
+      <legend>Recording</legend>
+      <label class="check"><input type="radio" name="audio" value="fetch" checked> <span>Fetch the video's audio for me</span></label>
+      <div id="ss-audio-password" class="indent" hidden>
+        <label>Password for the shared audio key <input id="ss-password-inline" type="password" autocomplete="current-password"></label>
+        <p class="note">Ask whoever sent you here, or use your own audio file instead.</p>
+      </div>
+      <label class="check"><input type="radio" name="audio" value="file"> <span>Use an audio file I have (.mp3 or .m4a of the same video)</span></label>
+      <div class="indent"><input id="ss-audio-file" type="file" accept=".mp3,.m4a,audio/mpeg,audio/mp4" disabled aria-label="Audio file"></div>
+      <label class="check"><input type="radio" name="audio" value="none"> <span>No recording (the synthesizer only)</span></label>
+    </fieldset>
+    <p class="ss-actions"><button id="ss-convert" class="primary" type="submit" disabled>Convert and add to the library</button> <span id="ss-convert-message" class="note"></span></p>
+  </form>
+
+  <section id="ss-intro">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in psarc2gp</a>
+        <p id="ss-bookmarklet-key" class="note"></p></li>
+      <li>Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and wait until its tab has loaded.</li>
+      <li>Click the bookmark. This page opens with the song: pick the tracks and the video, and it becomes a Guitar Pro file with the video's audio, synced bar by bar to Songsterr's own timings.</li>
+    </ol>
+    <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to this page. If the handover doesn't work, its panel saves the song as a file instead:
+      <label class="link">open a saved song file<input id="ss-pick" type="file" accept=".json,application/json" hidden></label> (or drop it on this page).</p>
+  </section>
+
+  <section class="ss-key">
+    <h2>Shared audio key</h2>
+    <p class="note">psarc2gp gets a video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file.</p>
+    <div id="ss-key-locked" hidden>
+      <form id="ss-unlock-form" class="row">
+        <label>Password <input id="ss-password" type="password" autocomplete="current-password"></label>
+        <button type="submit">Unlock</button>
+      </form>
+    </div>
+    <div id="ss-key-unlocked" class="row" hidden>
+      <span>Unlocked in this browser.</span>
+      <button id="ss-invite" type="button">Copy invite link</button>
+      <button id="ss-forget" class="quiet" type="button">Forget the password</button>
+    </div>
+    <p id="ss-key-none" class="note" hidden>This copy of psarc2gp has no shared audio key: songs need your own audio file.</p>
+    <p id="ss-key-message" class="note" role="status"></p>
+  </section>
 </section>
 
 <section id="player-view" aria-label="Player" hidden>

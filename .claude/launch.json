@@ -19,6 +19,16 @@
         "8766"
       ],
       "port": 8766
+    },
+    {
+      "name": "web-2",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.js",
+        "--port",
+        "8767"
+      ],
+      "port": 8767
     }
   ]
 }

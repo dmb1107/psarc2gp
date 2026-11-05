@@ -1,6 +1,9 @@
 # Songsterr songs → synced Guitar Pro files: plan
 
-Status: **step 2 built and tried with the real key** (2026-11-05): the swappable audio providers, the
+Status: **step 3 built** (2026-11-05): the real bookmarklet and the web app's Songsterr page (unlocking,
+invite link, songs from the bookmarklet or a saved file, tracks/video/audio choice, conversion in the worker,
+library records); checked in the browser pane with saved bundles and on Songsterr's real page, but **the
+cross-tab handoff still needs a real browser** (see step 3). **Step 2 built and tried with the real key** (2026-11-05): the swappable audio providers, the
 encrypted key file and its tool, and the CLI fetching the audio itself; UNDERWATER BOI fetched through
 RapidAPI "sounds good" in GP8, and the provider's offset is measured (13 ms, see step 2). **Step 1 built** (2026-11-04): `src/songsterr/` converts a saved bundle with the CLI
 (`--audio file` or `--no-audio`), tested on five real songs; **the user heard UNDERWATER BOI in GP8 and it "sounds great"** (2026-11-05). Alternate
@@ -159,6 +162,16 @@ Built from the lab version into the web app's Songsterr page as a "drag this to 
 (the button's code carries the web app's own address). Reads as above, shows a small status panel on the
 Songsterr page, opens the web app with the bundle, offers "save bundle" as the fallback. Kept small and
 self-contained; it sends nothing anywhere but the user's own web app tab.
+
+Built (step 3): the page fills in `"__APP__"` and `"__PASSWORD__"`, strips the comments and joins the lines
+(`buildBookmarklet` in web/songsterr.js; the source uses block comments and semicolons only, since some
+browsers keep a bookmark on one line). The handoff doesn't rely on `window.opener`: the bookmarklet says
+`psarc2gp-hello` to the tab it opened every 250 ms (to the app's origin only), the app answers
+`psarc2gp-ready` to whoever said it (from `https://www.songsterr.com` only), receives
+`{ type: "psarc2gp-song", bundle, password }` and confirms with `psarc2gp-received`. So it also works when
+the bookmarklet reuses an app tab that is already open (window name `psarc2gp`), where the opener isn't
+reset. "Save the song as a file" fetches every track from the CDN on click; the web app and the CLI both
+open the file.
 
 ### 2. Converter core: `src/songsterr/` (platform-neutral, like the rest of `src/`)
 
@@ -491,9 +504,39 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    Added `--nudge <ms>` (per song, positive = the recording is late) so a song can be corrected by ear.
    Automatic per-song alignment (onsets against the points) would need decoded audio (browsers have
    decodeAudioData; Node has no decoder) and a steadier measurement than this one: research, later.
-3. The real bookmarklet + the web app's Songsterr page: settings panel and unlocking (prompt, invite link
-   before routing, bookmarklet), bundle handling, video choice, conversion in the worker, library.
-4. `tools/verify-songsterr.js`; bookmarklet in Chrome and Safari.
+3. **Built** (2026-11-05): `web/songsterr-bookmarklet.js` (§1) and the Songsterr page (`#/songsterr`,
+   `web/songsterr.js`): the bookmarklet button; the shared key (unlock, "Copy invite link", forget); songs
+   from the bookmarklet or a saved `.json` (picked or dropped anywhere); a form with the tracks (guitars and
+   basses preselected, drums and vocals shown as "not yet"), the usable videos (Songsterr's first, backing
+   tracks naming what they leave out, a count of the ones synced to other revisions) and the recording
+   (fetch it, an audio file, or none). The worker (`convert-worker.js`) answers `songsterr-inspect` (played
+   bars and which videos fit; the fetched tabs come back and are kept, so nothing is fetched twice) and
+   converts with progress (asking, downloading x / y MB, writing). Library records get `source: "songsterr"`,
+   `songsterrId`, `revisionId`, `videoId`, `feature`, `audioProvider`; "Already in your library" names the
+   video and revision when they differ. The password is kept in localStorage once it has opened the key
+   file; the key is decrypted when needed and kept in memory only; a kept password that no longer opens the
+   file is forgotten (the page asks again). `#unlock=` is read at load **and on hashchange** (an invite
+   pasted into an open tab is a fragment change, no reload; first version left the password in the
+   address), then replaced with `#/`. Safari users get a line about its 7-day storage rule.
+   Checked: test/songsterr-web.test.js (the built bookmarklet parses as one line and runs against a fake
+   Songsterr page: hello/ready/received, origins, song fields only, no account data, cache-then-one-request,
+   blocked pop-up, refused points); in the browser pane (Chromium), saved UNDERWATER BOI and Enter Sandman
+   bundles through the form with a silent M4A, no recording, Replace, a too-short file (clear message), wrong
+   passwords, the invite link, the built site in a subfolder, and the player; on Songsterr's real page the
+   bookmarklet read revision 5672979, the CDN and all 8 videos' points from the cache with no request to
+   Songsterr, and sent only the song fields. psarc snapshot identical to the baseline (15/15).
+   **Not tried yet:** the cross-tab handoff in a real browser (the browser pane opens `window.open` in the
+   same tab, which replaced the Songsterr page), and fetching the audio from the page with the real key
+   (CORS from the page was proven in the lab). Next: the user drags the button in Firefox and Chrome, opens
+   a song, clicks it, and converts with "Fetch the video's audio for me".
+   **Handoff tried by the user in a real browser** (2026-11-05): "that worked".
+   **Source link in the .gp** (2026-11-05): Guitar Pro's Notices (File › Score information) holds
+   `Tab: <Songsterr page> (revision n)` and `Recording and sync: https://www.youtube.com/watch?v=<id>`
+   (plus the video's kind when not Songsterr's default). The page is the one the bookmarklet read, without
+   query and fragment, if it is a songsterr.com address for this song id; otherwise
+   `https://www.songsterr.com/a/wsa/<artist>-<title>-tab-s<id>`, which Songsterr redirects to the song
+   (checked on s514895). `songsterrLink`'s result is also in `convertSongsterr`'s `meta.link`.
+4. `tools/verify-songsterr.js`; bookmarklet in Firefox, Chrome and Safari (step 3's open check).
 5. README, PRODUCT.md decisions (5 replaced, 15+ added), CLAUDE.md facts and ground rules. Then drums and
    vocals.
 

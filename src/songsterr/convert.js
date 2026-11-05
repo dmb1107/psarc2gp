@@ -1,7 +1,7 @@
 // Songsterr bundle (+ audio) -> Guitar Pro 8 (.gp) with a sync point on every played bar.
 // Runs in Node and in browsers, like src/convert.js: bundle and bytes in, bytes out.
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
-import { validateBundle, loadTracks, defaultTrackIndices, trackKind } from "./bundle.js";
+import { validateBundle, loadTracks, defaultTrackIndices, trackKind, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
 import { playedBars, chooseVideo, describeVideos, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
@@ -9,17 +9,10 @@ import { rewriteZipEntry } from "../gp/zip.js";
 import { syncPointsInPlayOrder } from "../gp/syncpoints.js";
 import { utf8 } from "../lib/bytes.js";
 
-export { validateBundle };
+export { validateBundle, songsterrOutputName };
 
 const QUARTER_TICKS = 960; // alphaTab's MIDI resolution
 
-const clean = (s) => String(s ?? "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim();
-
-// "Artist - Title (Songsterr).gp": the suffix keeps it apart from a .psarc version of the same song
-// (the web library keys songs by file name, and the CLI skips existing files)
-export function songsterrOutputName(song) {
-  return `${clean(song.artist) || "Unknown"} - ${clean(song.title) || "Untitled"} (Songsterr).gp`;
-}
 
 function loadScore(tex) {
   const settings = new alphaTab.Settings();
@@ -69,6 +62,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   const barQuarters = (i) => score.masterBars[i].calculateDuration() / QUARTER_TICKS;
   const sync = syncFromPoints(chosen.points, played, barQuarters, { writtenCount: written, offsetMs: audio?.offsetMs ?? 0 });
   score.applyFlatSyncPoints(sync.flat);
+  score.notices = songsterrNotices(bundle, chosen);
 
   const odd = sync.tempos.map((t, k) => ({ t, k })).filter(({ t }) => !(t >= 20 && t <= 400));
   if (odd.length) warn(`${odd.length} played bar(s) get an implausible tempo from the video's points (first: played bar ${odd[0].k + 1}, ${Math.round(odd[0].t)} bpm); the video may not fit`);
@@ -94,7 +88,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     gp,
     tex: built.tex,
     name: songsterrOutputName(s),
-    meta: { artist: s.artist, title: s.title, songsterrId: s.songId, revisionId: s.revisionId, videoId: chosen.videoId, audioProvider: audio?.provider ?? null },
+    meta: { artist: s.artist, title: s.title, link: songsterrLink(bundle), songsterrId: s.songId, revisionId: s.revisionId, videoId: chosen.videoId, audioProvider: audio?.provider ?? null },
     report: {
       bars: written,
       playedBars: played.length,

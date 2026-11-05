@@ -43,8 +43,9 @@ src/notation/       timeline (bars, meters, count-in, sync points), arrangement 
 src/gp/             post-processing of alphaTab's .gp: RSE sounds per track (rse.js), zip rewrite (zip.js)
 src/lib/            Uint8Array helpers, AES-256 CTR/CFB and inflate in plain JS (tested against node:crypto/zlib)
 web/                the web app: index.html + app.js (library view, conversion queue, routing),
-                    convert-worker.js (src/convert.js in a module worker), library.js (IndexedDB),
-                    player.js (alphaTab player: tracks, recording/synth, speed, loop)
+                    convert-worker.js (src/convert.js and src/songsterr/ in a module worker), library.js
+                    (IndexedDB), player.js (alphaTab player: tracks, recording/synth, speed, loop),
+                    songsterr.js (Songsterr page: shared key, invite link, song form), songsterr-bookmarklet.js
 windows/            Send To installer (CRLF line endings, see .gitattributes; keep the .ps1 ASCII-only,
                     Windows PowerShell 5.1 reads BOM-less files as ANSI)
 windows/preview/    Explorer preview pane add-in: C# (.NET Framework 4.8) hosting WebView2, which shows
@@ -137,6 +138,13 @@ Web app and browser port:
 - Dragging across the score selects a playback range (enableUserInteraction); a click seeks and clears it.
 - The library keeps list fields and the .gp Blob in separate object stores, so marking a song played
   doesn't rewrite the file; updateSong reads and writes in one transaction (two updates at once lost one).
+- The Songsterr bookmarklet and the app talk by hello/ready/received messages (the app answers whoever said
+  hello, from https://www.songsterr.com only), not through `window.opener`. Claude's browser pane opens
+  `window.open` in the same tab, so the cross-tab handoff can only be tried in a real browser; on the real
+  Songsterr page, stub `window.open` with a same-origin iframe's window to check what it would send.
+- `#unlock=<password>` (invite link) must be handled on hashchange too: pasted into an open app tab it's a
+  fragment change, not a load. web/songsterr.js imports nothing that touches the page at load, so Node
+  tests can import `buildBookmarklet`.
 - GitHub Pages serves the site from a subfolder (`/<repo>/`) and is case-sensitive: every URL in web/
   must be relative and match the file name exactly (Windows hides case mistakes). The "site" launch
   config serves `dist/`, so the built site runs at `/site/`, a subfolder like on Pages.

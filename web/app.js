@@ -1,6 +1,8 @@
-// psarc2gp in the browser: convert Rocksmith .psarc files into Guitar Pro files, keep them in a library
-// in this browser, and practise with them. Everything runs on this computer; nothing is uploaded.
+// psarc2gp in the browser: convert Rocksmith .psarc files (and Songsterr songs, see songsterr.js) into
+// Guitar Pro files, keep them in a library in this browser, and practise with them. Conversion runs on this
+// computer and nothing is uploaded; a Songsterr song's audio is fetched by video id from a conversion service.
 import { Player } from "./player.js";
+import { initSongsterrPage, openSongFile, takeInviteFromAddress } from "./songsterr.js";
 import { allSongs, deleteSong, getFile, getSong, isPersistent, putSong, songId, storageEstimate, updateSong } from "./library.js";
 
 const $ = (id) => document.getElementById(id);
@@ -95,7 +97,7 @@ function songRow(s) {
     el("span", { className: "song-len", textContent: clock(s.seconds) }),
     el("span", { className: "song-meta", textContent: [s.artist, s.album].filter(Boolean).join(" · ") }),
     // a .gp added as it was can share its title with a converted one: show which file it is
-    el("span", { className: "song-tracks", textContent: [s.source === "gp" && s.name, ...s.tracks].filter(Boolean).join(" · ") }));
+    el("span", { className: "song-tracks", textContent: [s.source === "gp" && s.name, s.source === "songsterr" && "Songsterr", ...s.tracks].filter(Boolean).join(" · ") }));
   open.addEventListener("click", () => { location.hash = `#/play/${encodeURIComponent(s.id)}`; });
 
   const save = el("button", { className: "icon-button", type: "button", title: `Download ${s.name}` }, icon(ICON_DOWNLOAD));
@@ -120,8 +122,11 @@ async function showStorage() {
   const used = songs.reduce((n, s) => n + (s.size ?? 0), 0);
   const estimate = await storageEstimate();
   const room = estimate?.quota ? ` Room for about ${megabytes(estimate.quota - (estimate.usage ?? 0))} more.` : "";
+  // Safari deletes a site's storage after 7 days of use without a visit (not for apps added to the Dock)
+  const safari = /^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent)
+    ? " Safari clears it if you don't visit for a week: keep the .gp files, or add this page to the Dock or Home Screen." : "";
   $("storage").textContent = songs.length
-    ? `${songs.length} song${songs.length === 1 ? "" : "s"}, ${megabytes(used)}, kept in this browser on this computer.${room} Clearing this site's data in the browser removes them; the download buttons give you the .gp files.`
+    ? `${songs.length} song${songs.length === 1 ? "" : "s"}, ${megabytes(used)}, kept in this browser on this computer.${room} Clearing this site's data in the browser removes them; the download buttons give you the .gp files.${safari}`
     : "";
 }
 
@@ -130,41 +135,79 @@ $("sort").value = ORDER[prefs.get("sort")] ? prefs.get("sort") : "played";
 $("sort").addEventListener("change", () => { prefs.set("sort", $("sort").value); renderLibrary(); });
 
 // ---------------------------------------------------------------------------------- conversion
-// One file at a time, in a worker, in the order added.
+// One song at a time, in a worker, in the order added. ask() sends the worker one request and resolves
+// with its answer; progress messages along the way go to onProgress.
 const worker = new Worker(new URL("./convert-worker.js", import.meta.url), { type: "module" });
+const pending = new Map();
+let nextRequest = 1;
+function ask(message, transfer = [], onProgress = () => {}) {
+  const id = nextRequest++;
+  return new Promise((resolve) => {
+    pending.set(id, { resolve, onProgress });
+    worker.postMessage({ ...message, id }, transfer);
+  });
+}
+worker.addEventListener("message", ({ data }) => {
+  const p = pending.get(data.id);
+  if (!p) return;
+  if (data.progress) { p.onProgress(data.progress); return; }
+  pending.delete(data.id);
+  p.resolve(data);
+});
+worker.addEventListener("error", (e) => {
+  e.preventDefault();
+  for (const p of pending.values()) p.resolve({ ok: false, error: e.message || "the converter didn't start (try reloading the page)" });
+  pending.clear();
+});
+
 const queue = [];
 let busy = null;
 let nextId = 1;
 const FINISHED = new Set(["done", "exists", "replaced", "error"]);
 
 function enqueue(files) {
-  const known = [...files].filter((f) => /\.(psarc|gp)$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name));
-  for (const file of known) queue.push({ id: nextId++, file, kind: /\.psarc$/i.test(file.name) ? "psarc" : "gp", state: "waiting" });
-  if (!known.length && files.length) queue.push({ id: nextId++, file: files[0], state: "error", message: "not a .psarc or .gp file" });
+  files = [...files];
+  const bundles = files.filter((f) => /\.json$/i.test(f.name));
+  const known = files.filter((f) => /\.(psarc|gp)$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name));
+  for (const file of known) queue.push({ id: nextId++, file, label: file.name, kind: /\.psarc$/i.test(file.name) ? "psarc" : "gp", state: "waiting" });
+  if (!known.length && !bundles.length && files.length) queue.push({ id: nextId++, label: files[0].name, state: "error", message: "not a .psarc, .gp or Songsterr song file" });
+  renderQueue();
+  pump();
+  if (bundles.length) openSongFile(bundles[0]); // the Songsterr page takes one song at a time
+  else if (known.length && location.hash !== "#/" && location.hash !== "") location.hash = "#/";
+}
+
+// a song from the Songsterr page: { bundle, tracks, video, audio: "fetch" | "file" | "none", file, secrets, name }
+function enqueueSongsterr(job) {
+  queue.push({ id: nextId++, kind: "songsterr", label: job.name, job, state: "waiting" });
+  location.hash = "#/";
   renderQueue();
   pump();
 }
 
-function pump() {
+async function pump() {
   if (busy) return;
   const item = queue.find((q) => q.state === "waiting");
   if (!item) return;
   busy = item;
   item.state = "working";
   renderQueue();
-  item.file.arrayBuffer().then(
-    (bytes) => worker.postMessage({ id: item.id, kind: item.kind, name: item.file.name, bytes }, [bytes]),
-    (err) => finish(item, { ok: false, error: err.message }));
+  let result;
+  try {
+    if (item.kind === "songsterr") {
+      const { bundle, tracks, video, audio, file, secrets } = item.job;
+      const bytes = file ? await file.arrayBuffer() : null;
+      result = await ask({ kind: "songsterr", bundle, tracks, video, audio, secrets, file: bytes && { bytes, name: file.name } },
+        bytes ? [bytes] : [], (p) => { item.progress = p; renderQueue(); });
+    } else {
+      const bytes = await item.file.arrayBuffer();
+      result = await ask({ kind: item.kind, name: item.file.name, bytes }, [bytes]);
+    }
+  } catch (err) {
+    result = { ok: false, error: err.message };
+  }
+  finish(item, result);
 }
-
-worker.addEventListener("message", ({ data }) => {
-  const item = queue.find((q) => q.id === data.id);
-  if (item) finish(item, data);
-});
-worker.addEventListener("error", (e) => {
-  e.preventDefault();
-  if (busy) finish(busy, { ok: false, error: e.message || "the converter didn't start (try reloading the page)" });
-});
 
 async function finish(item, result) {
   busy = null;
@@ -175,10 +218,13 @@ async function finish(item, result) {
     item.song = {
       id: songId(s.name), name: s.name, title: s.title, artist: s.artist, album: s.album,
       tracks: s.tracks, seconds: s.seconds, size: s.gp.byteLength, added: Date.now(), played: null, source: item.kind,
+      ...s.songsterr, // songsterrId, revisionId, videoId, feature, audioProvider
     };
     item.gp = new Blob([s.gp], { type: "application/octet-stream" });
-    if (await getSong(item.song.id)) {
+    const old = await getSong(item.song.id);
+    if (old) {
       item.state = "exists";
+      item.old = old;
     } else {
       await putSong(item.song, item.gp);
       item.state = "done";
@@ -186,8 +232,10 @@ async function finish(item, result) {
     }
   } catch (err) {
     item.state = "error";
-    item.message = /quota/i.test(err.name ?? "") || /quota/i.test(err.message) ? "not enough room in this browser's storage" : err.message;
+    item.message = result?.code ? err.message // an audio error: already in the users' wording
+      : /quota/i.test(err.name ?? "") || /quota/i.test(err.message) ? "not enough room in this browser's storage" : err.message;
   }
+  if (item.job) delete item.job.secrets; // not kept around once used
   renderQueue();
   pump();
 }
@@ -204,7 +252,7 @@ function renderQueue() {
   $("queue-section").hidden = !queue.length;
   $("clear-queue").hidden = !queue.some((q) => FINISHED.has(q.state));
   $("queue").replaceChildren(...queue.map((item) => {
-    const li = el("li", {}, el("span", { className: "q-name", textContent: item.song?.name ?? item.file.name }));
+    const li = el("li", {}, el("span", { className: "q-name", textContent: item.song?.name ?? item.label }));
     const state = (text, cls = "") => li.append(el("span", { className: `q-state ${cls}`, textContent: text }));
     const button = (text, fn, cls = "") => {
       const b = el("button", { type: "button", className: cls, textContent: text });
@@ -215,15 +263,39 @@ function renderQueue() {
     const save = () => button("Download", () => download(item.gp, item.song.name));
     switch (item.state) {
       case "waiting": state("Waiting"); break;
-      case "working": li.append(el("span", { className: "spinner" })); state(item.kind === "psarc" ? "Converting…" : "Adding…"); break;
+      case "working": li.append(el("span", { className: "spinner" })); state(item.kind === "gp" ? "Adding…" : progressText(item.progress)); break;
       case "done": state("Added to the library", "done"); play(); save(); break;
-      case "exists": state("Already in your library"); button("Replace it", () => replace(item)); save(); break;
+      case "exists": state(`Already in your library${versions(item)}`); button("Replace it", () => replace(item)); save(); break;
       case "replaced": state("Replaced", "done"); play(); save(); break;
-      case "error": state(`Couldn't convert: ${item.message}`, "error"); break;
+      case "error":
+        state(`Couldn't convert: ${item.message}`, "error");
+        if (item.kind === "songsterr") button("Back to the song", () => { location.hash = "#/songsterr"; });
+        break;
     }
     if (item.warnings?.length) li.append(el("p", { className: "q-warn", textContent: item.warnings.map((w) => `Note: ${w}`).join("\n") }));
     return li;
   }));
+}
+
+const mb = (n) => (n / 1048576).toFixed(1);
+function progressText(p) {
+  switch (p?.stage) {
+    case "converting": return "Asking for the video's audio…";
+    case "downloading": return p.received ? `Downloading the audio, ${mb(p.received)}${p.total ? ` / ${mb(p.total)}` : ""} MB` : "Downloading the audio…";
+    case "audio": return "Getting the audio…";
+    case "building": return "Writing the Guitar Pro file…";
+    default: return "Converting…";
+  }
+}
+
+// a Songsterr song that's already in the library: say which video and revision each one is
+function versions(item) {
+  const a = item.old, b = item.song;
+  if (b.source !== "songsterr" || a.source !== "songsterr") return "";
+  if (a.videoId === b.videoId && a.revisionId === b.revisionId) return " (same video and revision)";
+  const what = (s) => [`video ${s.videoId}`, `revision ${s.revisionId}`];
+  const [av, ar] = what(a), [bv, br] = what(b);
+  return ` (yours: ${[av, ar].filter((x, i) => x !== [bv, br][i]).join(", ")}; this one: ${[bv, br].filter((x, i) => x !== [av, ar][i]).join(", ")})`;
 }
 
 $("clear-queue").addEventListener("click", () => {
@@ -247,7 +319,7 @@ async function droppedFiles(dataTransfer) {
   const files = [];
   async function walk(entry) {
     if (entry.isFile) {
-      if (/\.(psarc|gp)$/i.test(entry.name)) files.push(await new Promise((resolve, reject) => entry.file(resolve, reject)));
+      if (/\.(psarc|gp|json)$/i.test(entry.name)) files.push(await new Promise((resolve, reject) => entry.file(resolve, reject)));
     } else if (entry.isDirectory) {
       const reader = entry.createReader();
       for (;;) {
@@ -271,15 +343,24 @@ document.addEventListener("drop", async (e) => {
   e.preventDefault();
   dragDepth = 0;
   $("drop").classList.remove("over");
-  const files = droppedFiles(e.dataTransfer);
-  if (location.hash.startsWith("#/play/")) location.hash = "#/";
-  enqueue(await files);
+  enqueue(await droppedFiles(e.dataTransfer));
 });
 
 // ---------------------------------------------------------------------------------------- views
 let openSong = null;
 
+function showView(name) {
+  for (const v of ["library", "songsterr", "player"]) $(`${v}-view`).hidden = v !== name;
+  $("nav-songsterr").setAttribute("aria-current", name === "songsterr" ? "page" : "false");
+}
+
 async function route() {
+  if (location.hash === "#/songsterr") {
+    closePlayer();
+    showView("songsterr");
+    document.title = "Songs from Songsterr · psarc2gp";
+    return;
+  }
   const m = location.hash.match(/^#\/play\/(.+)$/);
   if (!m) { showLibrary(); return; }
   const id = decodeURIComponent(m[1]);
@@ -287,8 +368,7 @@ async function route() {
   const song = await getSong(id);
   if (!song) { location.replace("#/"); return; }
   openSong = song;
-  $("library-view").hidden = true;
-  $("player-view").hidden = false;
+  showView("player");
   $("title").textContent = song.title || song.name;
   $("byline").textContent = [song.artist, song.album].filter(Boolean).join(" · ");
   document.title = `${song.title || song.name} · psarc2gp`;
@@ -303,13 +383,16 @@ async function route() {
   }
 }
 
-function showLibrary() {
+function closePlayer() {
   if (openSong) {
     player.close();
     openSong = null;
   }
-  $("player-view").hidden = true;
-  $("library-view").hidden = false;
+}
+
+function showLibrary() {
+  closePlayer();
+  showView("library");
   document.title = "psarc2gp";
 }
 
@@ -324,7 +407,20 @@ $("download").addEventListener("click", async () => {
   if (openSong) download(await getFile(openSong.id), openSong.name);
 });
 
-window.addEventListener("hashchange", route);
+function notify(text) {
+  $("notice-text").textContent = text;
+  $("notice").hidden = false;
+}
+$("notice-close").addEventListener("click", () => { $("notice").hidden = true; });
+
+// an invite link (#unlock=<password>) is taken out of the address before routing, also when it's pasted
+// into a tab that already has the app open (a fragment change, no reload)
+function onAddress() {
+  takeInviteFromAddress()?.then(notify);
+  route();
+}
+initSongsterrPage({ ask, enqueue: enqueueSongsterr });
+window.addEventListener("hashchange", onAddress);
 refreshLibrary();
-route();
+onAddress();
 
