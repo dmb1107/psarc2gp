@@ -37,7 +37,9 @@ Everything that works for `.psarc` today keeps working unchanged (see "Don't bre
 Songsterr's API refuses automated clients (finding 5), and building around that filter is off the table.
 What works instead: a **bookmarklet** ("Open in psarc2gp") the user clicks while viewing a song on
 songsterr.com in their own browser. Songsterr's page has already loaded everything for that visitor; the
-bookmarklet only reads it and hands it to psarc2gp:
+bookmarklet only reads it and hands it to psarc2gp. It takes the song id from the address
+(`…-tab-s676767`, or with the chosen track's number after it, `…-tab-s676767t0`, seen 2026-11-05 on the
+user's Firefox; the first version refused that) and checks the page state is for that song:
 
 | Needed | Where the bookmarklet reads it | Request to Songsterr |
 |---|---|---|

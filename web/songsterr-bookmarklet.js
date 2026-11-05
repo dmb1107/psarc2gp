@@ -43,7 +43,8 @@
   };
   const fail = (text) => say(text, "#ff99a4");
 
-  const id = Number((location.pathname.match(/-s(\d+)(?:$|[/?#])/) || [])[1]);
+  /* "...-tab-s676767", or with the chosen track's number after it: "...-tab-s676767t0" */
+  const id = Number((location.pathname.match(/-s(\d+)(?:t\d+)?(?:$|\/)/) || [])[1]);
   if (location.hostname !== "www.songsterr.com" || !id) {
     fail("Open a song on www.songsterr.com first, then click the bookmark again.");
     return;

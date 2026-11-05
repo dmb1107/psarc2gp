@@ -124,6 +124,22 @@ test("bookmarklet: asks for the points once when they aren't cached", async () =
   assert.ok(page.win.posted.some((p) => p.data.type === "psarc2gp-song"));
 });
 
+test("bookmarklet: a song address with the chosen track's number (…-s514895t0) is the same song", async () => {
+  // the forms seen on songsterr.com (2026-11-05): tab, sheet, backing track and drum pages, with or without
+  // the track (a query such as ?open=editor isn't part of the pathname)
+  for (const path of ["/a/wsa/turnstile-underwater-boi-tab-s514895t0", "/a/wsa/turnstile-underwater-boi-tab-s514895t12/",
+    "/a/wsa/turnstile-underwater-boi-sheet-s514895t0", "/a/wsa/turnstile-underwater-boi-backing-track-s514895t0",
+    "/a/wsa/turnstile-underwater-boi-drum-tab-s514895"]) {
+    const page = fakeSongsterr({ path });
+    await run(page);
+    assert.doesNotMatch(page.text(), /Open a song on/, path);
+    assert.deepEqual(page.env.opened, { url: `${APP}#/songsterr`, name: "psarc2gp" }, path);
+  }
+  const other = fakeSongsterr({ path: "/a/wsa/turnstile-underwater-boi-tab-s514895x0" });
+  await run(other);
+  assert.match(other.text(), /Open a song on www\.songsterr\.com/);
+});
+
 test("bookmarklet: says what's wrong instead of sending", async () => {
   const elsewhere = fakeSongsterr({ host: "example.com" });
   await run(elsewhere);
