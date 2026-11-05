@@ -46,7 +46,7 @@ src/lib/            Uint8Array helpers, AES-256 CTR/CFB and inflate in plain JS 
 web/                the web app: index.html + app.js (library view, conversion queue, routing),
                     convert-worker.js (src/convert.js and src/songsterr/ in a module worker), library.js
                     (IndexedDB), player.js (alphaTab player: tracks, recording/synth, speed, loop),
-                    songsterr.js (Songsterr page: shared key, invite link, song form), songsterr-bookmarklet.js
+                    songsterr.js (setup page's shared key and bookmarklet, invite link; Songsterr song form), songsterr-bookmarklet.js
 windows/            Send To installer (CRLF line endings, see .gitattributes; keep the .ps1 ASCII-only,
                     Windows PowerShell 5.1 reads BOM-less files as ANSI)
 windows/preview/    Explorer preview pane add-in: C# (.NET Framework 4.8) hosting WebView2, which shows

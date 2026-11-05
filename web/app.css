@@ -61,7 +61,7 @@ svg { fill: currentColor; }
 }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--fg); text-decoration: none; }
 .tagline { color: var(--muted); }
-#theme { margin-left: auto; color: var(--muted); }
+#theme { margin-left: auto; color: var(--muted); white-space: nowrap; }
 @media (max-width: 640px) { .tagline { display: none; } }
 
 /* ------------------------------------------------------------------------------------ library */
@@ -79,6 +79,16 @@ svg { fill: currentColor; }
 .drop-sub { color: var(--muted); margin-top: 4px !important; }
 .drop-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 14px 0 12px; }
 .private { color: var(--muted); font-size: 12.5px; }
+
+.sources { margin-bottom: 16px; }
+.sources h2 { margin-bottom: 8px; }
+.source-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.source { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--raised); }
+.source h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+.source h3 a { text-decoration: none; }
+.source h3 a:hover { text-decoration: underline; }
+.source p { margin: 0; color: var(--muted); }
+.source p a { white-space: nowrap; }
 
 .section-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 22px auto 8px; }
 .section-head h2 { margin-right: auto; }
@@ -181,8 +191,9 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 .at-highlight * { fill: var(--accent); stroke: var(--accent); }
 
 /* ---------------------------------------------------------------------------------- songsterr */
-#nav-songsterr { margin-left: auto; text-decoration: none; color: var(--fg); }
-#nav-songsterr + #theme { margin-left: 0; }
+.navlink { margin-left: auto; padding: 5px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.navlink:hover, .navlink[aria-current="page"] { color: var(--fg); background: var(--hover); }
+.navlink + #theme { margin-left: 0; }
 .notice {
   margin: 0; padding: 8px 16px;
   background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-bottom: 1px solid var(--line);
@@ -215,6 +226,10 @@ legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
 .steps li { margin-bottom: 8px; }
 .bookmarklet { cursor: grab; text-decoration: none; margin-left: 6px; }
 .bookmarklet[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
-.ss-key { margin-top: 26px; }
+.setup-part { margin-bottom: 26px; }
+.setup-part h2 { margin-bottom: 6px; }
+#ss-empty p { margin: 0; }
+#ss-empty .note { margin-top: 6px; }
+#ss-notice { margin: 0 auto 12px; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 label.link { cursor: pointer; padding: 0; }

@@ -1,6 +1,6 @@
-// The web app's Songsterr page: the bookmarklet to drag, the shared audio key (unlock, invite link,
-// forget), songs arriving from the bookmarklet or a saved song file, and the form that picks tracks, video
-// and audio before the song joins the conversion queue.
+// The web app's Songsterr parts: on the setup page, the shared audio key (unlock, invite link, forget) and
+// the bookmarklet to drag; on the Songsterr page (#/songsterr), songs arriving from the bookmarklet or a
+// saved song file, and the form that picks tracks, video and audio before the song joins the conversion queue.
 //
 // The key: web/songsterr-secrets.json holds the audio providers' secrets encrypted with one password
 // (src/songsterr/secrets.js). The password is kept in this browser's localStorage once it has opened the
@@ -208,7 +208,7 @@ async function renderBookmarklet() {
   }
   $("ss-bookmarklet-key").textContent = isUnlocked()
     ? "The button carries the shared key's password, so the bookmark unlocks psarc2gp in any browser it's used in. Keep it to yourself."
-    : "If you have the shared key's password, unlock below first and then drag the button: it then carries the password, so you're never asked again.";
+    : "If you have the shared key's password, unlock above first and then drag the button: it then carries the password, so you're never asked again.";
 }
 
 // ------------------------------------------------------------------------- songs from Songsterr
@@ -225,7 +225,7 @@ function onMessage(e) {
   const pw = e.data.password;
   if (typeof pw === "string" && pw && pw !== currentPassword()) {
     unlock(pw).catch((err) => {
-      if (err.code === "password") $("ss-key-message").textContent = "The bookmark's password no longer opens the shared audio key: unlock below with the new one, then drag the button again.";
+      if (err.code === "password") $("ss-notice").textContent = "The bookmark's password no longer opens the shared audio key: unlock with the new one on the Setup page, then drag the button again.";
     });
   }
   openBundle(e.data.bundle, "bookmarklet");
@@ -297,7 +297,7 @@ function renderSong() {
   $("ss-error").textContent = c?.error ? `Can't convert this song: ${c.error}` : "";
   const show = !!c?.bundle;
   $("ss-form").hidden = !show;
-  $("ss-intro").hidden = show || !!c;
+  $("ss-empty").hidden = show || !!c;
   if (!show) return;
   const { song } = c.bundle;
   $("ss-title").textContent = `${song.artist} – ${song.title}`;

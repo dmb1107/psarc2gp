@@ -350,8 +350,8 @@ document.addEventListener("drop", async (e) => {
 let openSong = null;
 
 function showView(name) {
-  for (const v of ["library", "songsterr", "player"]) $(`${v}-view`).hidden = v !== name;
-  $("nav-songsterr").setAttribute("aria-current", name === "songsterr" ? "page" : "false");
+  for (const v of ["library", "songsterr", "setup", "player"]) $(`${v}-view`).hidden = v !== name;
+  $("nav-setup").setAttribute("aria-current", name === "setup" ? "page" : "false");
 }
 
 async function route() {
@@ -359,6 +359,12 @@ async function route() {
     closePlayer();
     showView("songsterr");
     document.title = "Songs from Songsterr · psarc2gp";
+    return;
+  }
+  if (location.hash === "#/setup") {
+    closePlayer();
+    showView("setup");
+    document.title = "Setup and help · psarc2gp";
     return;
   }
   const m = location.hash.match(/^#\/play\/(.+)$/);

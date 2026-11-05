@@ -13,16 +13,30 @@
 <header class="appbar">
   <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">psarc2gp</a>
   <span class="tagline">Rocksmith and Songsterr songs to Guitar Pro, synced to the recording</span>
-  <a id="nav-songsterr" class="button quiet" href="#/songsterr">From Songsterr</a>
+  <a id="nav-setup" class="navlink" href="#/setup">Setup and help</a>
   <button id="theme" class="quiet" type="button" title="Colour theme">Theme: system</button>
 </header>
 <p id="notice" class="notice" role="status" hidden><span id="notice-text"></span> <button id="notice-close" class="link" type="button">OK</button></p>
 
 <section id="library-view" class="page" aria-label="Library">
+  <section class="sources" aria-labelledby="sources-title">
+    <h2 id="sources-title">Where to get songs</h2>
+    <div class="source-cards">
+      <div class="source">
+        <h3><a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge</a></h3>
+        <p>A community library of custom songs (CDLC) for Rocksmith 2014, charted by fans for guitar and bass, each with the song's recording. Download the <b>.psarc</b> files (a free account is needed) and drop them in the box below.</p>
+      </div>
+      <div class="source">
+        <h3><a href="https://www.songsterr.com/" target="_blank" rel="noopener">Songsterr</a></h3>
+        <p>A tab site with a huge catalogue for guitar, bass and more, most songs synced to a video of the recording. With the psarc2gp bookmark, open a song there and click the bookmark: the tab comes here with the video's audio.
+          <a href="#/setup">Set up the bookmark</a></p>
+      </div>
+    </div>
+  </section>
+
   <div id="drop" class="drop">
     <p class="drop-title">Drop Rocksmith <b>.psarc</b> files or a folder here</p>
     <p class="drop-sub">Each song becomes a Guitar Pro 8 file with the original recording and a sync point on every beat. You can also add <b>.gp</b> files.</p>
-    <p class="drop-sub">Need songs? Find Rocksmith custom songs on <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge Ignition</a>, or bring tabs <a href="#/songsterr">from Songsterr</a>.</p>
     <div class="drop-actions">
       <label class="button primary">Choose files<input id="pick-files" type="file" accept=".psarc,.gp,.json" multiple hidden></label>
       <label class="button">Choose a folder<input id="pick-folder" type="file" webkitdirectory hidden></label>
@@ -91,21 +105,33 @@
     <p class="ss-actions"><button id="ss-convert" class="primary" type="submit" disabled>Convert and add to the library</button> <span id="ss-convert-message" class="note"></span></p>
   </form>
 
-  <section id="ss-intro">
-    <h2>How it works</h2>
+  <p id="ss-notice" class="note" role="status"></p>
+  <section id="ss-empty" class="ss-box">
+    <p>No song yet. Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and click the psarc2gp bookmark: the song appears here.</p>
+    <p class="note">No bookmark yet? <a href="#/setup">Set it up</a> (it takes a minute).</p>
+  </section>
+</section>
+
+<section id="setup-view" class="page" aria-label="Setup and help" hidden>
+  <div class="ss-head">
+    <a class="back" href="#/" title="Back to the library">&larr; Library</a>
+    <h1>Setup and help</h1>
+  </div>
+
+  <section class="setup-part">
+    <h2>How to use psarc2gp</h2>
     <ol class="steps">
-      <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in psarc2gp</a>
-        <p id="ss-bookmarklet-key" class="note"></p></li>
-      <li>Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and wait until its tab has loaded.</li>
-      <li>Click the bookmark. This page opens with the song: pick the tracks and the video, and it becomes a Guitar Pro file with the video's audio, synced bar by bar to Songsterr's own timings.</li>
+      <li><b>Get songs.</b> Rocksmith custom songs (.psarc) from <a href="https://ignition4.customsforge.com/" target="_blank" rel="noopener">CustomsForge</a>, or tabs from <a href="https://www.songsterr.com/" target="_blank" rel="noopener">Songsterr</a> with the bookmark below.</li>
+      <li><b>Add them.</b> Drop .psarc files or a whole folder on the <a href="#/">library</a> page (or use its buttons). Each song becomes a Guitar Pro 8 file with the original recording and a sync point on every beat.</li>
+      <li><b>Practise.</b> Click a song to open the player: follow the tab with the recording, slow it down, drag across bars to loop a passage, or switch to the synthesizer to hear the notes alone.</li>
+      <li><b>Take it to Guitar Pro.</b> The download button gives you the .gp file; open it in Guitar Pro 8 to edit, with the recording still in sync.</li>
     </ol>
-    <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to this page. If the handover doesn't work, its panel saves the song as a file instead:
-      <label class="link">open a saved song file<input id="ss-pick" type="file" accept=".json,application/json" hidden></label> (or drop it on this page).</p>
+    <p class="note">Your files stay on this computer. Conversion runs inside this page and songs are kept in this browser's storage; nothing is uploaded. Download the songs you want to keep for good.</p>
   </section>
 
-  <section class="ss-key">
-    <h2>Shared audio key</h2>
-    <p class="note">psarc2gp gets a video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file.</p>
+  <section class="setup-part">
+    <h2>Songsterr: 1. The shared audio key (optional)</h2>
+    <p class="note">psarc2gp gets a Songsterr video's audio from a conversion service, with a key shared by a few friends and locked with a password. Everything else works without it: you can always use your own audio file of the video instead.</p>
     <div id="ss-key-locked" hidden>
       <form id="ss-unlock-form" class="row">
         <label>Password <input id="ss-password" type="password" autocomplete="current-password"></label>
@@ -119,6 +145,18 @@
     </div>
     <p id="ss-key-none" class="note" hidden>This copy of psarc2gp has no shared audio key: songs need your own audio file.</p>
     <p id="ss-key-message" class="note" role="status"></p>
+  </section>
+
+  <section class="setup-part">
+    <h2>Songsterr: 2. The bookmark</h2>
+    <ol class="steps">
+      <li>Drag this button to your browser's bookmarks bar: <a id="ss-bookmarklet" class="button primary bookmarklet" draggable="true">Open in psarc2gp</a>
+        <p id="ss-bookmarklet-key" class="note"></p></li>
+      <li>Open a song on <a href="https://www.songsterr.com/" target="_blank" rel="noopener">songsterr.com</a> and wait until its tab has loaded.</li>
+      <li>Click the bookmark. psarc2gp opens with the song: pick the tracks and the video, and it becomes a Guitar Pro file with the video's audio, synced bar by bar to Songsterr's own timings.</li>
+    </ol>
+    <p class="note">The bookmark only reads what the Songsterr page has already loaded, and hands it to psarc2gp. If the handover doesn't work, its panel saves the song as a file instead:
+      <label class="link">open a saved song file<input id="ss-pick" type="file" accept=".json,application/json" hidden></label> (or drop it on the library page).</p>
   </section>
 </section>
 
