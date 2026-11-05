@@ -238,6 +238,10 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     bar's time signature are added after it, each with its own sync point at the song's closing tempo
     (median of the last eight bars; `restBarsUntil` in sync.js), until the recording ends; a remainder
     under a tenth of a bar gets none. The tab's own bars keep the video's points. Only with a recording.
+    They stop where the **sound** ends, not the file: the first version ran 6½ bars into Kerosene!'s
+    12 s of silence after the song (the user's Guitar Pro screenshot). An MP3's end is read from its
+    frames without decoding (`mp3SoundEnd` in duration.js: the last granule carrying audio within 30 dB
+    of the song's median global_gain); an M4A still counts to the end of the file.
 
 ## Observations from real use
 

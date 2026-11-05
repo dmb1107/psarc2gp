@@ -3,6 +3,7 @@
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
+import { detectFormat, mp3SoundEnd } from "./audio/duration.js";
 import { playedBars, chooseVideo, describeVideos, fitVideos, emptyTail, restBarsUntil, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
 import { rewriteZipEntry } from "../gp/zip.js";
@@ -95,7 +96,10 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   // the recording goes on after the tab: rest bars until it ends (sync.js restBarsUntil)
   let restBarsAdded = 0;
   if (sync && audio?.seconds != null) {
-    const more = restBarsUntil(points, played, barQuarters, sync.endSeconds, audio.seconds - offsetMs / 1000);
+    // up to where the sound ends, not the file: a video often runs on in silence after the song
+    // (an MP3's end is read from its frames; other formats count to the end of the file)
+    const soundEnd = Math.min(audio.seconds, (audio.bytes && detectFormat(audio.bytes) === "mp3" && mp3SoundEnd(audio.bytes)) || Infinity);
+    const more = restBarsUntil(points, played, barQuarters, sync.endSeconds, soundEnd - offsetMs / 1000);
     if (more.length) {
       const padded = kept.map((d) => ({ ...d, data: { ...d.data, measures: [...d.data.measures, ...more.map(() => ({ voices: [] }))] } }));
       const r = structureOf(bundle, padded, () => {});
@@ -105,7 +109,8 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
       points = [...points, ...more];
       restBarsAdded = more.length;
       sync = syncFromPoints(points, played, barQuarters, { writtenCount: written, offsetMs });
-      warn(`the recording goes on ${(audio.seconds - offsetMs / 1000 - more[0]).toFixed(1)} s after the tab's last bar: ${more.length} rest bar(s) added at the song's closing tempo (the file ends at bar ${written})`);
+      const silent = audio.seconds - soundEnd;
+      warn(`the recording goes on ${(soundEnd - offsetMs / 1000 - more[0]).toFixed(1)} s after the tab's last bar: ${more.length} rest bar(s) added at the song's closing tempo (the file ends at bar ${written}${silent >= 1 ? `; the recording's last ${silent.toFixed(1)} s are silent and get none` : ""})`);
     }
   }
   if (sync) score.applyFlatSyncPoints(sync.flat);

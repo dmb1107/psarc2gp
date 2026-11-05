@@ -51,6 +51,49 @@ export function mp3Header(b, at) {
   return { sampleRate, samples, length, sideInfo, mono };
 }
 
+// Where an MP3's sound ends, in seconds from the start of the file, read from the frames' side info
+// without decoding: the end of the last granule that carries audio (part2_3_length > 0) at a level
+// within 30 dB of the song's (global_gain steps are 1.5 dB; the median over every granule with audio).
+// A YouTube video often runs on after the song (Kerosene!: music to 296 s, a fade, digital silence
+// from 302.5 s, file 308 s), and a constant-bitrate encoder fills quiet frames with bits, so the gain
+// is what tells. null when the file has too few frames to tell.
+export function mp3SoundEnd(b) {
+  let i = firstFrame(b, skipId3(b));
+  if (i < 0) return null;
+  const bit = (pos, n, at) => { let v = 0; for (let k = 0; k < n; k++) { const x = at + k; v = (v << 1) | ((b[pos + (x >> 3)] >> (7 - (x & 7))) & 1); } return v; };
+  const granules = []; // [end time, gain] of granules that carry audio
+  let t = 0;
+  while (i + 4 <= b.length) {
+    const h = mp3Header(b, i);
+    if (!h || i + h.length > b.length) break;
+    const layer3 = h.sideInfo > 0;
+    const v1 = h.samples === 1152;
+    const ch = h.mono ? 1 : 2;
+    const si = i + 4 + ((b[i + 1] & 1) ? 0 : 2); // a CRC follows the header when the protection bit is 0
+    if (layer3) {
+      let p = v1 ? 9 + (ch === 1 ? 5 : 3) + 4 * ch : 8 + ch; // main_data_begin, private bits, scfsi
+      const per = v1 ? 2 : 1;
+      for (let g = 0; g < per; g++) {
+        let gain = -1;
+        for (let c = 0; c < ch; c++) {
+          // global_gain (after part2_3_length and big_values) of a channel that carries audio: an empty
+          // channel can say 210 at the edge of digital silence (Inside My Memory, 251 s)
+          if (bit(si, 12, p) > 0) gain = Math.max(gain, bit(si, 8, p + 21));
+          p += v1 ? 59 : 63;
+        }
+        if (gain >= 0) granules.push([t + ((g + 1) * h.samples) / per / h.sampleRate, gain]);
+      }
+    }
+    t += h.samples / h.sampleRate;
+    i += h.length;
+  }
+  if (granules.length < 200) return null;
+  const gains = granules.map((g) => g[1]).sort((x, y) => x - y);
+  const floor = gains[gains.length >> 1] - 20;
+  for (let k = granules.length - 1; k >= 0; k--) if (granules[k][1] >= floor) return granules[k][0];
+  return null;
+}
+
 function skipId3(b) {
   if (ascii(b, 0, 3) !== "ID3" || b.length < 10) return 0;
   const size = ((b[6] & 0x7f) << 21) | ((b[7] & 0x7f) << 14) | ((b[8] & 0x7f) << 7) | (b[9] & 0x7f);

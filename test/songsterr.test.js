@@ -11,7 +11,7 @@ import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndice
 import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
 import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
-import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
+import { detectFormat, mp3Info, m4aInfo, audioInfo, mp3SoundEnd } from "../src/songsterr/audio/duration.js";
 
 // ---- fixtures
 
@@ -287,6 +287,39 @@ test("convert: empty bars after the videos' last point are left out, decided on 
   assert.equal(whole.score.masterBars.length, 6);
 });
 
+// MPEG-1 stereo frames (no CRC) whose side info says, per granule and channel, how many bits the audio
+// takes and its global_gain: [[bits, gain] ch0, [bits, gain] ch1] for both granules
+function soundMp3(frames) {
+  const parts = [Uint8Array.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0])];
+  for (const [l, r] of frames) {
+    const f = new Uint8Array(417);
+    f.set([0xff, 0xfb, 0x90, 0x00]);
+    const put = (at, n, v) => { for (let k = 0; k < n; k++) if ((v >> (n - 1 - k)) & 1) f[4 + ((at + k) >> 3)] |= 0x80 >> ((at + k) & 7); };
+    let p = 9 + 3 + 8;
+    for (let g = 0; g < 2; g++) for (const [bits, gain] of [l, r]) { put(p, 12, bits); put(p + 21, 8, gain); p += 59; }
+    parts.push(f);
+  }
+  const out = new Uint8Array(parts.reduce((a, x) => a + x.length, 0));
+  let o = 0;
+  for (const x of parts) { out.set(x, o); o += x.length; }
+  return out;
+}
+const FRAME_S = 1152 / 44100;
+
+test("MP3 sound end: the last granule with audio within 30 dB of the song, read from the frames", () => {
+  const loud = Array(300).fill([[500, 180], [500, 182]]);
+  const fade = Array(50).fill([[500, 150], [500, 150]]); // 45 dB down: inaudible under the song
+  const silent = Array(50).fill([[0, 210], [0, 210]]);
+  assert.ok(Math.abs(mp3SoundEnd(soundMp3([...loud, ...fade, ...silent])) - 300 * FRAME_S) < 1e-9);
+  // an empty channel's 210 at the edge of silence isn't sound (Inside My Memory, 251 s)
+  const edge = Array(5).fill([[300, 140], [0, 210]]);
+  assert.ok(Math.abs(mp3SoundEnd(soundMp3([...loud, ...edge, ...silent])) - 300 * FRAME_S) < 1e-9);
+  // sound to the end, too few frames to tell, or no audio bits at all (our other synthetic MP3s)
+  assert.ok(Math.abs(mp3SoundEnd(soundMp3(loud)) - 300 * FRAME_S) < 1e-9);
+  assert.equal(mp3SoundEnd(soundMp3(loud.slice(0, 50))), null);
+  assert.equal(mp3SoundEnd(syntheticMp3(400)), null);
+});
+
 test("rest bars until the recording ends, at the closing tempo", () => {
   const played = Array.from({ length: 10 }, (_, bar) => ({ bar, occurrence: 0 }));
   const q = () => 4;
@@ -317,6 +350,12 @@ test("convert: the recording goes on after the tab → rest bars with their own 
   assert.equal(back.masterBars.length, 7);
   assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [1000, 3000, 5000, 7000, 9000, 11000, 13000]);
   assert.ok(back.tracks[0].staves[0].bars.slice(4).every((x) => x.voices[0].beats.every((bt) => bt.isRest)));
+  // a recording whose last seconds are silent: bars only to where the sound ends (11 s: one bar)
+  const quiet = soundMp3([...Array(Math.round(11 / FRAME_S)).fill([[500, 180], [500, 180]]), ...Array(Math.round(3 / FRAME_S)).fill([[0, 210], [0, 210]])]);
+  const w2 = [];
+  const q = await convertSongsterr(b, { audio: { ...audio, bytes: quiet }, onWarning: (w) => w2.push(w) });
+  assert.equal(q.report.restBarsAdded, 1);
+  assert.match(w2.join("\n"), /last 3\.0 s are silent and get none/);
   // no recording, or one that ends with the tab: nothing added
   assert.equal((await convertSongsterr(b, { audio: null })).report.restBarsAdded, 0);
   assert.equal((await convertSongsterr(b, { audio: { ...audio, seconds: 9 } })).report.restBarsAdded, 0);

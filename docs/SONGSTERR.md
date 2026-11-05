@@ -110,8 +110,12 @@ changes.
    verify-songsterr finds every note of all five tracks, 81 sync points, every video at 100%.
    **The recording outlasts the tab** (same song): the tab is synced to 148 s of a 308 s recording, and
    Guitar Pro stopped at the score's end. Since 2026-11-05 rest bars follow until the recording ends, at
-   the closing tempo (`restBarsUntil`; PRODUCT.md decision 24): Kerosene! gets 88, 168 bars and 169 sync
-   points, the last bar ending at 309.3 s.
+   the closing tempo (`restBarsUntil`; PRODUCT.md decision 24), up to where the sound ends: the video
+   runs on after the song (music fades at 296 s, digital silence from 302.5 s, file 308.1 s; a constant
+   bitrate fills the quiet frames, so it's the frames' global_gain that tells, `mp3SoundEnd`). Kerosene!
+   gets 81 rest bars, 161 bars and 162 sync points, the last bar ending at 296.5 s. Checked on a second
+   recording (Inside My Memory: music to ~248 s, found 248.8 s; an empty channel's gain of 210 at the
+   edge of silence must not count, or it said 251.4 s).
 4. **Points can be negative** (a video that starts after the tab's beginning: one alternative starts at
    −12.64 s), which means a positive `FramePadding`.
 5. **Songsterr's API refuses automated clients.** After about a dozen scripted requests, `api/meta`
