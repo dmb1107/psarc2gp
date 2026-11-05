@@ -23,12 +23,51 @@ export function playedBars(alphaTab, score, settings) {
 }
 
 // How a video's point count relates to the tab: "played" (one per played bar, the normal case),
-// "written" (one per written bar, only meaningful when they differ), or null (doesn't fit).
+// "written" (one per written bar, only meaningful when they differ), or null (doesn't fit). A video
+// already fitted by fitVideos (or described by describeVideos) keeps its fit.
+const pointCount = (v) => (Array.isArray(v.points) ? v.points.length : v.points);
 export function fitOf(video, playedCount, writtenCount) {
-  const n = video.points.length;
+  if (video.fit !== undefined) return video.fit;
+  const n = pointCount(video);
   if (n === playedCount) return "played";
   if (n === writtenCount) return "written";
   return null;
+}
+
+// One point too many: a video synced to this revision can carry a stray point that splits a bar in two
+// (Come As You Are, s14: bar 107 got two ~1 s points where every bar takes ~2 s). Returns the index of
+// the point to leave out, or null. Only when the evidence is unambiguous: leaving out exactly one point
+// makes every played bar's tempo plausible (within 50-200% of the song's median, the verifier's "bad
+// point" limit), the bar it rejoins comes out within 80-125% of the median, and no other point does the
+// same. Never a stretch: the remaining points are used as they are.
+//   quarters[k]: written length in quarter notes of played bar k (playback order)
+export function findStrayPoint(points, quarters) {
+  if (points.length !== quarters.length + 1 || quarters.length < 4) return null;
+  const median = (xs) => { const a = [...xs].sort((x, y) => x - y); return a.length % 2 ? a[a.length >> 1] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2; };
+  const found = [];
+  for (let j = 1; j < points.length - 1; j++) {
+    const p = points.filter((_, i) => i !== j);
+    // seconds per quarter note of each played bar but the last (which has no end point)
+    const spq = quarters.slice(0, -1).map((q, k) => (p[k + 1] - p[k]) / q);
+    if (spq.some((x) => !(x > 0))) continue;
+    const m = median(spq);
+    const rejoined = spq[j - 1] / m;
+    if (rejoined < 0.8 || rejoined > 1.25) continue;
+    if (spq.every((x) => x / m >= 0.5 && x / m <= 2)) found.push(j);
+  }
+  return found.length === 1 ? found[0] : null;
+}
+
+// The videos with their fit; a video with one stray point (findStrayPoint) fits with that point left
+// out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }.
+export function fitVideos(videos, quarters, writtenCount) {
+  return videos.map((v) => {
+    const fit = fitOf(v, quarters.length, writtenCount);
+    if (fit) return { ...v, fit };
+    const j = findStrayPoint(v.points, quarters);
+    if (j === null) return { ...v, fit: null };
+    return { ...v, points: v.points.filter((_, i) => i !== j), fit: "played", strayPoint: j };
+  });
 }
 
 export function describeVideos(videos, playedCount, writtenCount) {
@@ -37,8 +76,9 @@ export function describeVideos(videos, playedCount, writtenCount) {
     feature: v.feature ?? "default",
     leavesOut: v.tracks ?? null, // backing videos name the tracks they leave out
     countries: v.countries ?? null,
-    points: v.points.length,
+    points: pointCount(v),
     fit: fitOf(v, playedCount, writtenCount),
+    strayPoint: v.strayPoint ?? null,
   }));
 }
 
@@ -51,7 +91,8 @@ export function chooseVideo(videos, want, playedCount, writtenCount) {
   let pick = null;
   want = want || "default";
   if (want === "default") {
-    pick = videos.find((v) => !v.feature && fits(v))
+    // Songsterr's own video has no feature (described videos say "default")
+    pick = videos.find((v) => (!v.feature || v.feature === "default") && fits(v))
       ?? videos.find((v) => v.feature === "alternative" && everywhere(v) && fits(v))
       ?? videos.find((v) => v.feature === "alternative" && fits(v));
   } else if (["backing", "solo", "playthrough", "alternative"].includes(want)) {
@@ -59,7 +100,7 @@ export function chooseVideo(videos, want, playedCount, writtenCount) {
   } else {
     const v = videos.find((x) => x.videoId === want);
     if (!v) throw new Error(`video ${want} isn't listed for this song`);
-    if (!fits(v)) throw new Error(`video ${want} has ${v.points.length} sync points, but this tab revision plays ${playedCount} bars: it was synced to another revision`);
+    if (!fits(v)) throw new Error(`video ${want} has ${pointCount(v)} sync points, but this tab revision plays ${playedCount} bars: it was synced to another revision`);
     pick = v;
   }
   if (!pick) {

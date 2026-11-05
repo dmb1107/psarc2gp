@@ -338,19 +338,21 @@ function renderVideos() {
   const usable = c.info.videos.filter((v) => v.fit)
     .sort((a, b) => (RANK[a.feature] ?? 5) - (RANK[b.feature] ?? 5) || everywhere(b) - everywhere(a));
   let preferred = null;
-  try { preferred = chooseVideo(c.bundle.videos, "default", c.info.playedBars, c.info.bars).videoId; } catch { /* none fits */ }
+  // c.info.videos carry the worker's fit (including videos with a stray point left out)
+  try { preferred = chooseVideo(c.info.videos, "default", c.info.playedBars, c.info.bars).videoId; } catch { /* none fits */ }
   const names = c.bundle.song.tracks.map((t) => t.name);
-  select.replaceChildren(...usable.map((v) => {
+  select.replaceChildren(...(usable.length ? [] : [el("option", { value: "", textContent: "No video fits" })]), ...usable.map((v) => {
     const parts = [FEATURE[v.feature] ?? v.feature];
     if (v.feature === "backing" && v.leavesOut?.length) parts.push(`without ${v.leavesOut.map((i) => names[i] ?? `track ${i + 1}`).join(", ")}`);
     if (!everywhere(v)) parts.push(v.countries.length <= 3 ? `only in ${v.countries.join(", ")}` : `only in ${v.countries.length} countries`);
     if (v.fit === "written") parts.push("repeats timed from their first pass");
+    if (v.strayPoint != null) parts.push("one stray sync point left out");
     return el("option", { value: v.videoId, textContent: `${parts.join(", ")} (${v.videoId})`, selected: v.videoId === preferred });
   }));
   select.disabled = !usable.length;
   const others = c.info.videos.length - usable.length;
   $("ss-video-note").textContent = !usable.length
-    ? `None of the ${c.info.videos.length} videos fits this revision of the tab (they were synced to another one), so the song can't be synced. Try another revision on Songsterr.`
+    ? `None of the ${c.info.videos.length} videos fits this revision of the tab (they were synced to another one), so the recording can't be synced. Choose "No recording" to convert the tab on its own, or try another revision on Songsterr.`
     : others ? `${others} other video${others === 1 ? " was" : "s were"} synced to another revision of the tab and can't be used.` : "";
 }
 
@@ -359,7 +361,8 @@ function renderAudio() {
   const choice = document.querySelector('#ss-form input[name="audio"]:checked')?.value ?? "fetch";
   $("ss-audio-file").disabled = choice !== "file";
   $("ss-audio-password").hidden = !(choice === "fetch" && !isUnlocked());
-  const busy = current.inspecting || !current.info || !current.info.videos.some((v) => v.fit);
+  // with no recording, a tab that no video fits still converts (without sync points)
+  const busy = current.inspecting || !current.info || (choice !== "none" && !current.info.videos.some((v) => v.fit));
   $("ss-convert").disabled = busy;
 }
 

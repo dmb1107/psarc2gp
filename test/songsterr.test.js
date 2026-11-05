@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, trackUrl, trackKind, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex } from "../src/songsterr/score.js";
-import { playedBars, chooseVideo, syncFromPoints } from "../src/songsterr/sync.js";
+import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
 
@@ -207,6 +207,58 @@ test("video choice: default if it fits, else an alternative available everywhere
   assert.throws(() => chooseVideo(vids, "nope", 9, 6), /isn't listed/);
 });
 
+test("a stray point that splits one bar is left out; anything less clear is refused", () => {
+  const quarters = Array(10).fill(4); // ten 4/4 bars at 2 s each
+  const even = evenPoints(10, 2, 0.5);
+  const split = [...even.slice(0, 7), 13.5, ...even.slice(7)]; // bar 7 (12.5-14.5) gets a point in its middle
+  assert.equal(findStrayPoint(split, quarters), 7);
+  // a point a quarter into the bar is just as stray
+  assert.equal(findStrayPoint([...even.slice(0, 3), 6.9, ...even.slice(3)], quarters), 3);
+  // one more point at the end (an end point, or a bar the tab doesn't have): no bar is split, refused
+  assert.equal(findStrayPoint([...even, 20.5], quarters), null);
+  // a split somewhere in a song whose tempo is all over the place: refused
+  const rubato = [0, 2, 5, 6, 6.5, 9, 10, 13, 14, 17, 19];
+  assert.equal(findStrayPoint(rubato, quarters), null);
+  // two points too many, or the right count: not this function's business
+  assert.equal(findStrayPoint([...split, 22], quarters), null);
+  assert.equal(findStrayPoint(even, quarters), null);
+  // fitVideos marks it, chooseVideo takes it, the summary says so
+  const vids = fitVideos([video(split, { videoId: "stray" }), video(evenPoints(8), { videoId: "old" })], quarters, 10);
+  assert.deepEqual(vids.map((v) => [v.videoId, v.fit, v.strayPoint ?? null, v.points.length]), [["stray", "played", 7, 10], ["old", null, null, 8]]);
+  assert.equal(chooseVideo(vids, "default", 10, 10).videoId, "stray");
+  assert.equal(chooseVideo(describeVideos(vids, 10, 10), "default", 10, 10).videoId, "stray"); // what the web form has
+});
+
+test("convert: a video with a stray point syncs every bar from the others, with a warning", async () => {
+  const t = track([restBar(), restBar(), restBar(), restBar(), restBar()]);
+  const b = bundle([t], [video([0, 2, 4, 5, 6, 8], { videoId: "stray" })]);
+  const warnings = [];
+  const r = await convertSongsterr(b, { audio: null, onWarning: (w) => warnings.push(w) });
+  assert.equal(r.report.video.videoId, "stray");
+  assert.equal(r.report.video.strayPoint, 3);
+  assert.equal(r.report.syncPoints, 6);
+  assert.match(warnings.join("\n"), /point 4 splits played bar 3 \(written bar 3\) in two and was left out/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [0, 2000, 4000, 6000, 8000]);
+});
+
+test("convert: no video fits → the tab still converts without a recording (no sync points), never with one", async () => {
+  const t = track([restBar(), restBar(), restBar()]);
+  const b = bundle([t], [video(evenPoints(4), { videoId: "other-revision" })]);
+  const warnings = [];
+  const r = await convertSongsterr(b, { audio: null, onWarning: (w) => warnings.push(w) });
+  assert.equal(r.report.syncPoints, 0);
+  assert.equal(r.report.video, null);
+  assert.equal(r.meta.videoId, null);
+  assert.match(warnings.join("\n"), /no video fits this tab revision .*converted without sync points/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.equal(back.masterBars.flatMap((m) => m.syncPoints ?? []).length, 0);
+  assert.doesNotMatch(back.notices, /Recording and sync/);
+  const audio = { bytes: syntheticMp3(10), format: "mp3", seconds: 10, provider: "file" };
+  await assert.rejects(convertSongsterr(b, { audio }), /no video fits/);
+  await assert.rejects(convertSongsterr(b, { audio: async () => audio }), /no video fits/);
+});
+
 test("convert: repeats synced per pass, negative first point becomes FramePadding, name has the suffix", async () => {
   const t = track([restBar({ repeatStart: true }), restBar({ repeat: 2 }), restBar()]);
   const b = bundle([t], [video(evenPoints(5, 2, -1.5), { videoId: "early" })]);
@@ -402,7 +454,8 @@ for (const f of real) {
     // songs without guitar or bass (piano pieces): every track that isn't drums or vocals
     const tracks = defaultTrackIndices(b).length ? null : b.song.tracks.map((t, i) => i).filter((i) => !["drums", "vocals"].includes(trackKind(b.song.tracks[i])));
     const r = await convertSongsterr(b, { tracks });
-    assert.equal(r.report.syncPoints, r.report.playedBars + 1);
+    // a tab no video fits (all synced to other revisions) converts without sync points
+    assert.equal(r.report.syncPoints, r.report.video ? r.report.playedBars + 1 : 0);
     const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
     for (const tr of back.tracks) tr.staves[0].bars.forEach((x, i) => {
       assert.equal(x.voices[0].beats.reduce((a, y) => a + y.displayDuration, 0), back.masterBars[i].calculateDuration(), `${tr.name} bar ${i + 1}`);

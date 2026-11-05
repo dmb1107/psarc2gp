@@ -18,6 +18,7 @@ npm test                                   # unit tests; integration tests run i
 node bin/psarc2gp.js [-f] [-o dir] <file.psarc | folder> ...
 node tools/verify.js .samples/*.psarc      # bars complete, notes present, onset error vs chart
 node tools/sweep.js <folder> ...           # verify.js on a whole library, converted in memory
+node tools/verify-songsterr.js bundle.json ... [--all-videos]  # Songsterr: notes, bars, sync layout, video tempo
 node tools/snapshot.js a.json <folder> ... # fingerprint the output; --compare a.json b.json after a change
 node bin/psarc2gp.js song.json [--audio a.mp3]   # Songsterr bundle; no --audio fetches it (shared key's password)
 node tools/encrypt-secrets.js              # write web/songsterr-secrets.json (audio keys, one password)

@@ -189,7 +189,7 @@ async function convertBundle(file) {
     log("    videos:");
     const rank = (v) => (v.fit ? 0 : 2) + (v.feature === "default" ? 0 : 1);
     for (const v of [...videos].sort((x, y) => rank(x) - rank(y))) {
-      const extra = [v.leavesOut && `leaves out track ${v.leavesOut.join(", ")}`, v.fit === "written" && "one point per written bar"].filter(Boolean);
+      const extra = [v.leavesOut && `leaves out track ${v.leavesOut.join(", ")}`, v.fit === "written" && "one point per written bar", v.strayPoint != null && `point ${v.strayPoint + 1} splits a bar and is left out`].filter(Boolean);
       log(`      ${v.fit ? "fits " : "  -  "} ${v.feature.padEnd(12)} ${v.videoId}  ${v.points} points${extra.length ? `  (${extra.join("; ")})` : ""}`);
     }
     return "listed";
@@ -215,7 +215,7 @@ async function convertBundle(file) {
   if (opts.atex) fs.writeFileSync(outPath.replace(/\.gp$/, ".atex"), result.tex);
   const r = result.report;
   log(`OK   ${path.basename(outPath)}  (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
-  log(`    ${r.bars} bars (${r.playedBars} played), ${r.syncPoints} sync points from video ${r.video.videoId} (${r.video.feature})` +
+  log(`    ${r.bars} bars (${r.playedBars} played), ${r.video ? `${r.syncPoints} sync points from video ${r.video.videoId} (${r.video.feature})` : "no sync points (no video fits)"}` +
     `${r.audioSeconds ? `, ${fmtTime(r.audioSeconds)} of audio${r.audioProvider === "file" ? "" : ` from ${provider(r.audioProvider).label}`}` : ""}`);
   if (got && (got.offsetMs || opts.nudge)) log(`    sync shifted ${got.offsetMs + opts.nudge} ms (${[got.offsetMs && `${got.offsetMs} for ${provider(got.provider).label}`, opts.nudge && `${opts.nudge} nudge`].filter(Boolean).join(" + ")})`);
   if (got?.meta?.quotaRemaining != null) log(`    shared audio allowance left: ${got.meta.quotaRemaining} requests`);

@@ -70,7 +70,7 @@ async function fromSongsterr({ bundle, tracks, video, audio: choice, file, secre
     tracks: report.tracks.map((t) => t.name),
     seconds: report.audioSeconds,
     warnings: report.warnings,
-    songsterr: { songsterrId: meta.songsterrId, revisionId: meta.revisionId, videoId: meta.videoId, feature: report.video.feature, audioProvider: meta.audioProvider },
+    songsterr: { songsterrId: meta.songsterrId, revisionId: meta.revisionId, videoId: meta.videoId, feature: report.video?.feature ?? null, audioProvider: meta.audioProvider },
     gp: result.gp.slice(),
   };
 }

@@ -293,7 +293,7 @@ function versions(item) {
   const a = item.old, b = item.song;
   if (b.source !== "songsterr" || a.source !== "songsterr") return "";
   if (a.videoId === b.videoId && a.revisionId === b.revisionId) return " (same video and revision)";
-  const what = (s) => [`video ${s.videoId}`, `revision ${s.revisionId}`];
+  const what = (s) => [s.videoId ? `video ${s.videoId}` : "no recording", `revision ${s.revisionId}`];
   const [av, ar] = what(a), [bv, br] = what(b);
   return ` (yours: ${[av, ar].filter((x, i) => x !== [bv, br][i]).join(", ")}; this one: ${[bv, br].filter((x, i) => x !== [av, ar][i]).join(", ")})`;
 }

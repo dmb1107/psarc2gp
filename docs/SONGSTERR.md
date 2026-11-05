@@ -1,6 +1,7 @@
 # Songsterr songs → synced Guitar Pro files: plan
 
-Status: **step 3 built** (2026-11-05): the real bookmarklet and the web app's Songsterr page (unlocking,
+Status: **step 4 done** (2026-11-05): the bookmarklet works in Firefox and Chrome; `tools/verify-songsterr.js`
+is clean on all six real bundles except one flagged first bar (see step 4). **Step 3 built** (2026-11-05): the real bookmarklet and the web app's Songsterr page (unlocking,
 invite link, songs from the bookmarklet or a saved file, tracks/video/audio choice, conversion in the worker,
 library records); checked in the browser pane with saved bundles and on Songsterr's real page, but **the
 cross-tab handoff still needs a real browser** (see step 3). **Step 2 built and tried with the real key** (2026-11-05): the swappable audio providers, the
@@ -83,7 +84,17 @@ changes.
    pass through a repeat gets its own point.
 3. **Not every listed video fits the revision.** Enter Sandman lists 96 videos; most have 171–173 points
    (synced to older revisions, often with the first two points equal). Only an entry whose point count
-   equals the played-bar count is usable. On UNDERWATER BOI all 8 fit.
+   equals the played-bar count is usable. On UNDERWATER BOI all 8 fit. **Not even the default always fits:**
+   Come As You Are (s14, revision 9744332, the latest, 112 bars, no repeats): the default video and a backing
+   video, both listed for this revision, have 113 points; the other 68 have 107 or 108 (older revisions).
+   The extra point splits bar 107 (a ringing whole note in the "Ending") into two ~1 s halves; every other
+   bar takes ~2 s. Songsterr's player presumably maps points in order and lets those bars run fast.
+   **Handled (the user's decision, 2026-11-05):** a video with exactly one point too many fits when leaving
+   out exactly one point makes every played bar's tempo plausible (50–200% of the song's median), the bar it
+   rejoins comes out within 80–125% of the median, and no other point does the same (`findStrayPoint` in
+   sync.js). The point is left out with a warning, the form says "one stray sync point left out"; nothing
+   is stretched. Come As You Are then syncs at 100% of the tab's tempo with no uneven bar. Any other count
+   is still refused; then "No recording" (CLI `--no-audio`) converts the tab without sync points.
 4. **Points can be negative** (a video that starts after the tab's beginning: one alternative starts at
    −12.64 s), which means a positive `FramePadding`.
 5. **Songsterr's API refuses automated clients.** After about a dozen scripted requests, `api/meta`
@@ -536,7 +547,28 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    query and fragment, if it is a songsterr.com address for this song id; otherwise
    `https://www.songsterr.com/a/wsa/<artist>-<title>-tab-s<id>`, which Songsterr redirects to the song
    (checked on s514895). `songsterrLink`'s result is also in `convertSongsterr`'s `meta.link`.
-4. `tools/verify-songsterr.js`; bookmarklet in Firefox, Chrome and Safari (step 3's open check).
+4. **`tools/verify-songsterr.js` built** (2026-11-05). It converts each bundle in memory (no audio), reads
+   the `.gp` back with alphaTab, and checks: every bar of every track and voice is full; every Songsterr
+   note is there on its string and fret at its tick in the bar (grace notes by bar), with nothing extra;
+   one sync point per played bar plus the end point, times rising in play order, and `score.gpif` numbering
+   them by played bar as GP8 reads them; and the tempo the video's points give each played bar against the
+   tab's written tempo (tempo changes followed in play order). A song-wide ratio outside 67–150% is
+   reported as the wrong video or a half/double-time marking; a bar outside 50–200% of the song's own
+   ratio as a bad point; bars more than 20% off are counted as "uneven" (rubato, loose points), not a
+   problem. `--all-videos` shows the numbers for every video that fits; only the chosen video's count as
+   problems. Exit code 1 on any problem. test/verify-songsterr.test.js checks that it catches a changed
+   note, a half-time video and a bad point, and runs it on the real bundles.
+   On the five real bundles: every note found (6,000+ across 12 tracks), no incomplete bars, sync in GP8's
+   layout. Video/tab tempo: UNDERWATER BOI 101%, Enter Sandman 101%, Autumn Leaves 99%, Lágrima 84%,
+   Für Elise 71%. **One flag:** Für Elise's default video gives the 1/8 pickup 1.85 s (16 bpm; the bars after
+   it run at about 55–70): either the first point sits before the music starts, or the pianist holds the
+   pickup. Worth a listen in GP8 (does the first E come in late?).
+   **Bookmarklet in Chrome: works** (the user, 2026-11-05), as in Firefox. Step 4 is done.
+   **Safari: Songsterr's own page answers 403** (the user, 2026-11-05), while other browsers on the same
+   computer get it; so the bookmarklet never runs there. Not caused by psarc2gp (nothing of ours runs in
+   Safari before the bookmarklet is clicked on a loaded page, and a block caused by our requests would hit
+   the other browsers on the same connection too). Not iCloud Private Relay either (turning it off didn't
+   help). Cause unknown; the user doesn't need Safari, so it's left alone. Safari stays untested.
 5. README, PRODUCT.md decisions (5 replaced, 15+ added), CLAUDE.md facts and ground rules. Then drums and
    vocals.
 

@@ -3,7 +3,7 @@
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, trackKind, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
-import { playedBars, chooseVideo, describeVideos, syncFromPoints } from "./sync.js";
+import { playedBars, chooseVideo, describeVideos, fitVideos, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
 import { rewriteZipEntry } from "../gp/zip.js";
 import { syncPointsInPlayOrder } from "../gp/syncpoints.js";
@@ -35,13 +35,17 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
   const built = buildAlphaTex(bundle, data, { warn });
   const { score, settings } = loadScore(built.tex);
   const played = playedBars(alphaTab, score, settings);
-  return { data, built, score, settings, played, videos: describeVideos(bundle.videos, played.length, score.masterBars.length) };
+  const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
+  // fitted: the videos with their fit, stray points left out (sync.js fitVideos); videos: their summary
+  const fitted = fitVideos(bundle.videos, quarters, score.masterBars.length);
+  return { data, built, score, settings, played, fitted, videos: describeVideos(fitted, played.length, score.masterBars.length) };
 }
 
 // Options:
 //   tracks     track indices (default: every guitar and bass track)
 //   video      "default" | "backing" | "solo" | "playthrough" | "alternative" | a YouTube video id
-//   audio      { bytes, format: "mp3" | "m4a", seconds, provider, offsetMs } or null (no audio track), or an
+//   audio      { bytes, format: "mp3" | "m4a", seconds, provider, offsetMs } or null (no audio track; then a tab
+//              that no video fits still converts, without sync points), or an
 //              async function ({ videoId, feature, lastPoint }) → that, called once the video is chosen
 //              (so the audio of the right video is fetched, and only after the tab converted)
 //   rse, mute  as convertPsarc
@@ -53,20 +57,31 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     const kind = trackKind(bundle.song.tracks[i] ?? {});
     if (kind === "drums" || kind === "vocals") throw new Error(`track ${i} (${bundle.song.tracks[i].name}) is ${kind}; only guitar, bass and other fretted tracks are converted so far`);
   }
-  const { built, score, settings, played } = await inspectSongsterr(bundle, { tracks, fetch, warn });
+  const { built, score, settings, played, fitted } = await inspectSongsterr(bundle, { tracks, fetch, warn });
   const written = score.masterBars.length;
-  const chosen = chooseVideo(bundle.videos, video, played.length, written);
-  if (chosen.points.length !== played.length) warn(`video ${chosen.videoId} has one point per written bar, not per played bar: repeats are timed from the first pass`);
+  let chosen = null;
+  try {
+    chosen = chooseVideo(fitted, video, played.length, written);
+  } catch (e) {
+    // without a recording the sync points do nothing, so a tab no video fits still converts
+    if (audio !== null) throw e;
+    warn(`${e.message}; converted without sync points (no recording)`);
+  }
+  if (chosen?.strayPoint != null) {
+    const k = chosen.strayPoint - 1; // the played bar it fell in
+    warn(`video ${chosen.videoId} has one sync point more than the tab has played bars: point ${chosen.strayPoint + 1} splits played bar ${k + 1} (written bar ${played[k].bar + 1}) in two and was left out`);
+  }
+  if (chosen && chosen.points.length !== played.length) warn(`video ${chosen.videoId} has one point per written bar, not per played bar: repeats are timed from the first pass`);
   if (typeof audio === "function") audio = await audio({ videoId: chosen.videoId, feature: chosen.feature ?? "default", lastPoint: chosen.points.at(-1) });
 
   const barQuarters = (i) => score.masterBars[i].calculateDuration() / QUARTER_TICKS;
-  const sync = syncFromPoints(chosen.points, played, barQuarters, { writtenCount: written, offsetMs: audio?.offsetMs ?? 0 });
-  score.applyFlatSyncPoints(sync.flat);
+  const sync = chosen && syncFromPoints(chosen.points, played, barQuarters, { writtenCount: written, offsetMs: audio?.offsetMs ?? 0 });
+  if (sync) score.applyFlatSyncPoints(sync.flat);
   score.notices = songsterrNotices(bundle, chosen);
 
-  const odd = sync.tempos.map((t, k) => ({ t, k })).filter(({ t }) => !(t >= 20 && t <= 400));
+  const odd = (sync?.tempos ?? []).map((t, k) => ({ t, k })).filter(({ t }) => !(t >= 20 && t <= 400));
   if (odd.length) warn(`${odd.length} played bar(s) get an implausible tempo from the video's points (first: played bar ${odd[0].k + 1}, ${Math.round(odd[0].t)} bpm); the video may not fit`);
-  if (audio?.seconds != null && audio.seconds < chosen.points.at(-1) + (audio.offsetMs ?? 0) / 1000) {
+  if (chosen && audio?.seconds != null && audio.seconds < chosen.points.at(-1) + (audio.offsetMs ?? 0) / 1000) {
     warn(`the audio (${audio.seconds.toFixed(1)} s) ends before the last bar starts (${chosen.points.at(-1).toFixed(1)} s)`);
   }
 
@@ -88,12 +103,12 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     gp,
     tex: built.tex,
     name: songsterrOutputName(s),
-    meta: { artist: s.artist, title: s.title, link: songsterrLink(bundle), songsterrId: s.songId, revisionId: s.revisionId, videoId: chosen.videoId, audioProvider: audio?.provider ?? null },
+    meta: { artist: s.artist, title: s.title, link: songsterrLink(bundle), songsterrId: s.songId, revisionId: s.revisionId, videoId: chosen?.videoId ?? null, audioProvider: audio?.provider ?? null },
     report: {
       bars: written,
       playedBars: played.length,
-      syncPoints: sync.flat.length,
-      video: { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds },
+      syncPoints: sync?.flat.length ?? 0,
+      video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null },
       audioSeconds: audio?.seconds ?? null,
       audioProvider: audio?.provider ?? null,
       tracks: built.tracks.map((t) => ({ ...t, soundName: rse ? SOUNDS[t.sound].label : `MIDI program ${SOUNDS[t.sound].program}` })),
