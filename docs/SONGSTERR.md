@@ -147,33 +147,73 @@ Tried in the lab (`.samples/songsterr-lab/audio.html`, 2026-11-04, user's key, U
 | decode, compare with the points | 185.0 s; last bar starts at 182.2 s, so the whole tab is covered |
 | `.gp` with the MP3 embedded, Songsterr's points | user in GP8: sections appear to line up ("hard to tell" with placeholder notes; recheck with real notes) |
 
-Design:
+MP3 is embedded as delivered (GP8 plays MP3; the click test landed on the beat). Same video ID → same
+timeline as Songsterr's points; nothing is cut.
 
-- `src/songsterr/audio.js`: one small module, `fetchAudio(videoId, { key, fetch })` → MP3 bytes, so the
-  provider can be swapped in one file. Checks: an MP3 (or M4A) header, a length that covers the last
-  point, clear errors for a bad key, an exhausted quota (the response's rate-limit headers) and a failed
-  conversion. Always through RapidAPI with the key; never the file host directly.
-- **The key** is the user's own, shared with friends (see "The API key" below). The CLI reads it from an
-  environment variable or a config file outside the repo.
-- MP3 is embedded as delivered (GP8 plays MP3; the click test landed on the beat). Same video ID → same
-  timeline as Songsterr's points; nothing is cut.
-- Fallbacks: "use an audio file I have" (drop a file); the free tier's quota is per key and month, so a
-  user who hits it waits or upgrades.
+#### Swappable audio sources (the user's requirement)
 
-No helper server is needed. It stays a fallback only if the API stops working: a small relay or a home
-machine.
+Conversion APIs come and go, so **how the audio is fetched is a plug-in**, chosen by configuration. Moving
+to another API, or to a server of our own if outages recur, means adding one provider file and changing the
+config; nothing else in the converter, the web app or the CLI changes.
+
+```
+src/songsterr/audio/
+  index.js            getAudio(videoId, options): runs the configured providers in order, validates the result
+  validate.js         format and length checks, shared by every provider
+  providers/
+    rapidapi-youtube-mp310.js   today's provider
+    file.js                     "use an audio file I have" (always available, needs no secret)
+    helper.js                   our own server, if one is ever needed (contract below; not built until then)
+```
+
+- **One contract for every provider:**
+  `fetchAudio({ videoId, secret, fetch, signal, onProgress }) → { bytes, format, provider, meta }`. `fetch` is
+  passed in (browser and Node alike, and fakes in tests); `secret` is that provider's credential, if any;
+  `signal` cancels; `onProgress` feeds the queue's status ("converting…", "downloading 2.1 / 3.7 MB").
+- **One error vocabulary:** providers throw `AudioError` with a code: `auth` (bad or missing key), `quota`
+  (used up), `unavailable` (service down, removed, CORS refused), `not-found` (video private, removed or
+  blocked in the region), `failed` (conversion error, bad output). The web app and CLI show messages by
+  code, so swapping providers never changes the wording users see.
+- **Shared checks after every provider** (validate.js): the bytes are MP3 or M4A, the formats Guitar Pro 8
+  plays (Opus/WebM refused with a clear message, since GP8 won't play them); the audio is long enough to
+  cover the last sync point; a size sanity limit. A provider that returns something else is treated as
+  `failed`.
+- **Configuration**, `web/songsterr-audio.json`, committed (no secrets in it):
+  `{ "providers": ["rapidapi-youtube-mp310", "file"], "offsets": { "rapidapi-youtube-mp310": 0 } }`.
+  The list is the fallback order: on `unavailable` or `failed`, the next provider is tried; on `auth`,
+  `quota` or `not-found` the user is told, since another API wouldn't fix a private video. `file` last means
+  the user is always offered "drop an audio file". The CLI reads the same file, overridable with
+  `--audio-provider`.
+- **Per-provider offset** (`offsets`, ms, default 0): if a provider's audio turns out shifted (encoder
+  padding, a trimmed start), one number corrects every song from it, measured once with a known song.
+- **Secrets per provider:** the encrypted key file (below) holds `{ providerId: secret }`, so a new API's
+  key is added and rotated with the same tool and the same password.
+- **Provenance:** each Songsterr song in the library and each CLI report records which provider supplied
+  the audio, so a bad provider can be spotted and its songs redone.
+- **Tests:** a contract test every provider must pass, using recorded responses and a fake `fetch`
+  (success, bad key, quota, missing video, wrong format, too short); plus the shared checks.
+
+**If hosting becomes necessary** (the API disappears, or alternatives keep failing): `helper.js` talks to
+a small server of ours with a fixed, minimal interface, fixed now so the server can be written later
+without touching the client:
+`GET {base}/audio/{videoId}` with `Authorization: Bearer <token>` → `200` audio bytes (`audio/mpeg` or
+`audio/mp4`), or `401`/`429`/`404`/`502` mapped onto the same error codes; CORS for the web app's origins;
+nothing stored. Its `base` URL goes in the config and its token in the encrypted secrets, like an API
+key. Where it would run (home machine, cloud function, paid host) is decided then; data-centre IPs are often
+refused by YouTube.
 
 #### The API key
 
 The user's decision: friends use the user's own RapidAPI key (free plan, no payment details on the account,
 so low risk; one shared monthly quota), but the key must not be readable from GitHub.
 
-- **Encrypted in the repo and site.** `web/songsterr-key.json` holds the key encrypted with a password
-  (WebCrypto: PBKDF2-SHA-256 with a high iteration count and a random salt → AES-GCM). Without the password it
-  is opaque bytes no key scanner recognizes. The plain key is never committed, never in a build secret,
-  never in a log. `tools/encrypt-key.js` writes the file from a key and password typed at its prompt (not
-  passed as arguments, so they stay out of shell history); rotating the key or the password = run it again
-  and push. The user chose a simple password (low risk accepted: the encrypted file is public, so a short
+- **Encrypted in the repo and site.** `web/songsterr-secrets.json` holds the audio providers' secrets,
+  `{ providerId: secret }` (today just the RapidAPI key), encrypted together with one password (WebCrypto:
+  PBKDF2-SHA-256 with a high iteration count and a random salt → AES-GCM). Without the password it is opaque
+  bytes no key scanner recognizes. Plain secrets are never committed, never in a build secret, never in a
+  log. `tools/encrypt-secrets.js` writes the file from secrets and a password typed at its prompt (not passed
+  as arguments, so they stay out of shell history); adding a provider's key, rotating a key or changing the
+  password = run it again and push. The user chose a simple password (low risk accepted: the encrypted file is public, so a short
   password can be guessed offline).
 - **Unlocking:** the web app decrypts the key in the browser and keeps it in that browser's storage.
   Ways in: a password prompt the first time Songsterr audio is needed; an **invite link**
@@ -264,7 +304,8 @@ audio through the same API (key from the environment). Options:
 1. `src/songsterr/` core (bundle, score with sync, convert) + CLI reading a saved bundle with `--audio file`;
    tests. psarc snapshot unchanged. First real check: UNDERWATER BOI bass with **real notes** and its
    default video, played by the user in GP8 (the placeholder test was "hard to tell").
-2. `src/songsterr/audio.js` (the API) in the CLI.
+2. `src/songsterr/audio/` (contract, shared checks, the RapidAPI and file providers, contract tests) and
+   `tools/encrypt-secrets.js`; used by the CLI.
 3. The real bookmarklet + the web app's Songsterr page: key field, bundle handling, video choice,
    conversion in the worker, library.
 4. `tools/verify-songsterr.js`; bookmarklet in Chrome and Safari.
@@ -275,8 +316,9 @@ audio through the same API (key from the environment). Options:
 - **Songsterr changes its page** (state layout, API addresses, CDN). Mitigation: the bookmarklet is small
   and easy to update (users drag the button again); clear messages when a field is missing; saved bundles
   as test fixtures.
-- **The conversion API goes away or changes** (such services come and go). Mitigation: one module to
-  swap providers; "drop an audio file" always works; a relay or home machine as the last resort.
+- **The conversion API goes away or changes** (such services come and go). Mitigation: audio sources are
+  plug-ins chosen by config, with a fallback order (§3); another API is one provider file plus a config
+  change; "drop an audio file" always works; our own server has a fixed interface ready if needed.
 - **Quota.** The free plan's monthly quota is per key; each user has their own.
 - **Terms of service.** Extracting Songsterr's data and downloading YouTube audio likely break both sites'
   terms. Fine for personal practice is the user's judgment (agreed); nothing (tabs, audio, `.gp`, bundles,
