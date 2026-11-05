@@ -207,6 +207,12 @@ Web app and browser port:
 - GitHub Pages serves the site from a subfolder (`/<repo>/`) and is case-sensitive: every URL in web/
   must be relative and match the file name exactly (Windows hides case mistakes). The "site" launch
   config serves `dist/`, so the built site runs at `/site/`, a subfolder like on Pages.
+- The setup page's foot shows the build (`Build <run> · <commit> · <date>`, written into the HTML by
+  tools/build-web.js): what a visitor's tab is really running. Pages caches for 10 minutes, and a tab
+  opened just after a deploy can still run the old scripts (one did, 2026-11-05).
+- A Pages deployment is keyed by its commit. Once one is cancelled (it once hung at `updating_pages`),
+  every later deploy of that commit fails at once with "Deployment cancelled": push a new commit instead
+  of re-running the workflow.
 
 Explorer preview (windows/preview):
 - On the user's PC, registry writes to HKCU made from Claude Code's shell are invisible to every other
