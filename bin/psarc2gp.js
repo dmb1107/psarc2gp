@@ -35,7 +35,7 @@ Songsterr bundles:
                             recording sounds late (e.g. --nudge 40), negative when early
       --video <which>       default | backing | solo | playthrough | alternative | <YouTube video id>
       --list-videos         list the bundle's videos and whether they fit the tab, then stop
-      --tracks <i,j,...>    track numbers to convert (default: every guitar and bass track; see --list-videos)`;
+      --tracks <i,j,...>    track numbers to convert (default: every track that has notes; see --list-videos)`;
 
 function parseArgs(argv) {
   const opts = { force: false, out: null, recursive: false, audio: true, mute: true, rse: true, atex: false, pause: false, quiet: false, inputs: [],

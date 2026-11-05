@@ -313,17 +313,17 @@ const drumBar = () => bar([
   beat(4, [note(36, 4.5), note(49, -1)]), beat(4, [note(38, 1.5)]),
 ]);
 
-test("default tracks are guitars and basses; drums and vocals on request", async () => {
+test("default tracks are every non-empty track, vocals and drums too", async () => {
   const g = track([restBar()], { name: "Gtr", instrumentId: 30, tuning: [64, 59, 55, 50, 45, 40] });
   const v = track([restBar()], { name: "Vox", instrumentId: 54, tuning: [64, 59, 55, 50, 45, 40] });
   const metas = [{ name: "Vox", isVocalTrack: true, instrumentId: 54 }, { name: "Gtr", instrumentId: 30 }, { name: "Drums", instrumentId: 1024, isDrums: true }];
   const b = bundle([v, g, drumTrack([restBar()])], [video([0])], metas);
-  assert.deepEqual(defaultTrackIndices(b), [1]);
+  assert.deepEqual(defaultTrackIndices(b), [0, 1, 2]);
   assert.deepEqual(convertibleTrackIndices(b), [0, 1, 2]);
   const r = await convertSongsterr(b, {});
-  assert.equal(r.report.tracks[0].sound, "distortion");
-  const d = await convertSongsterr(b, { tracks: [0, 1, 2] });
-  assert.deepEqual(d.report.tracks.map((t) => t.sound), ["voice", "distortion", "drums"]);
+  assert.deepEqual(r.report.tracks.map((t) => t.sound), ["voice", "distortion", "drums"]);
+  const d = await convertSongsterr(b, { tracks: [1] });
+  assert.deepEqual(d.report.tracks.map((t) => t.sound), ["distortion"]);
 });
 
 // ---- vocals

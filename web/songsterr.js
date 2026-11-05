@@ -262,13 +262,9 @@ async function openBundle(bundle, from) {
   bundle.trackData ??= bundle.song.tracks.map(() => null);
   const me = (current = { bundle, from, info: null, inspecting: true });
   renderSong();
-  // the tracks that would be converted by default, or the first one that can be: enough to learn the
-  // played-bar count, which says which videos fit
+  // the tracks converted by default (every one with notes): they give the played-bar count, which says
+  // which videos fit, and are kept for the conversion
   const pick = defaultTrackIndices(bundle);
-  if (!pick.length) {
-    const other = bundle.song.tracks.findIndex((t) => convertible(t));
-    if (other >= 0) pick.push(other);
-  }
   if (!pick.length) {
     me.error = "all of this song's tracks are empty";
     me.inspecting = false;
@@ -309,7 +305,7 @@ function renderSong() {
     const ok = convertible(t);
     const why = t.isEmpty ? "empty" : trackKind(t) === "vocals" ? "vocals: notes and lyrics" : "";
     return el("label", { className: `check${ok ? "" : " off"}` },
-      el("input", { type: "checkbox", name: "track", value: String(i), checked: ok && (defaults.has(i) || (!defaults.size && i === song.tracks.findIndex(convertible))), disabled: !ok }),
+      el("input", { type: "checkbox", name: "track", value: String(i), checked: ok && defaults.has(i), disabled: !ok }),
       el("span", { textContent: t.name || `Track ${i + 1}` }),
       el("span", { className: "muted", textContent: why || t.instrument || "" }));
   }));

@@ -585,7 +585,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    alphaTab writes the drum kit's InstrumentSet (each piece's RSE samples); rse.js gives the track Guitar
    Pro 7's own "Drums/Drums/Drumkit" sound (patch Drumkit-Master, from alphaTab's test file
    guitarpro7/drum-tabs.gp; the user's GuitarPro folder has one drum track, whose sound entry is a piano
-   path, so it wasn't copied). Drums are offered but not ticked by default (the web form and `--tracks`).
+   path, so it wasn't copied). Drums were first offered but not ticked by default; since 2026-11-05 every track is (the web form and `--tracks`).
    Checked: verify-songsterr finds every drum note at its place with its id (Enter Sandman 2,183, Come As
    You Are 1,369, UNDERWATER BOI 882), bars full; render-check (percussion clef, noteheads per piece);
    unit tests; psarc snapshot identical (15/15). **Not yet:** heard in Guitar Pro 8 (does the RSE kit

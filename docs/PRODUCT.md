@@ -224,7 +224,7 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     written per beat (alphaTab's own placement doesn't skip tied notes). Guitar Pro has no voice sound and
     a track can't have none, so it gets the clarinet (the user's own GP8 vocal track uses it); vocal tracks
     are always written muted, even without a recording (the user asked for silent vocals, 2026-11-05).
-    Offered, not ticked by default, like drums.
+    Ticked by default, like every track (the user's choice, 2026-11-05; it was guitars and basses only).
 
 ## Observations from real use
 

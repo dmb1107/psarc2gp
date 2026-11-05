@@ -92,7 +92,7 @@ Set up once, on the web app's **Setup and help** page:
    to ask.
 
 Then open a song on songsterr.com, wait for its tab to load and click the bookmark. The web app opens
-with the song: pick the tracks (guitars and basses are preselected; drums are there to tick), the video (only videos whose timings
+with the song: pick the tracks (all of them are preselected), the video (only videos whose timings
 fit this version of the tab are offered, Songsterr's own first) and the recording (*fetch the video's
 audio for me*, *my own audio file* or *none*). It converts like a `.psarc` and lands in the same library,
 as `Artist - Title (Songsterr).gp`. Guitar Pro's *Score information* names the Songsterr page and the
@@ -108,7 +108,7 @@ YouTube video.
   tab still converts, without a recording.
 - Drum tracks become Guitar Pro drum notation with its RSE drum kit. Vocal tracks become a notation staff
   with the lyrics under the notes, kept silent (unmute one in Guitar Pro to hear the melody on a clarinet).
-  Drums and vocals are offered but not ticked by default.
+  Every track is ticked by default: untick the ones you don't want.
 - The bookmark doesn't work in Safari (Songsterr's own page refused to load there in testing).
 
 ### Browsers

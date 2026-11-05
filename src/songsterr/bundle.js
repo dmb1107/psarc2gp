@@ -77,9 +77,10 @@ export function convertibleTrackIndices(bundle) {
   return bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty).map(({ i }) => i);
 }
 
-// Tracks converted when none are asked for: guitars and basses (drums, vocals and the rest on request).
+// Tracks converted when none are asked for: all of them (the user's choice, 2026-11-05; Guitar Pro mutes
+// or hides a track in a click, and vocals are written muted anyway).
 export function defaultTrackIndices(bundle) {
-  return bundle.song.tracks.map((t, i) => ({ t, i })).filter(({ t }) => !t.isEmpty && ["guitar", "bass"].includes(trackKind(t))).map(({ i }) => i);
+  return convertibleTrackIndices(bundle);
 }
 
 export function trackKind(meta) {
