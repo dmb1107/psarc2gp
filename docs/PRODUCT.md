@@ -203,7 +203,7 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     one error vocabulary for every provider; a config module lists them in fallback order with a
     per-provider timing offset (13 ms for today's, its MP3 encoder delay); "use my own file" is always
     last. Another API, or a small server of ours with an interface already fixed, is one provider file.
-    Since 2026-11-05 a backup provider (RapidAPI "YouTube Info & Download API", its own workers) runs when
+    Since 2026-11-05 a backup provider (RapidAPI "YouTube MP3", youtube-mp36, its own file hosts) runs when
     the first can't deliver a video (the user's choice, after 502s on some videos); SONGSTERR.md risks.
     MP3 and M4A are embedded as delivered (Guitar Pro 8 plays both; Opus doesn't play and is refused).
     Guitar Pro's own YouTube audio source was tried and is dead in 8.1.5 (it calls an API YouTube retired).

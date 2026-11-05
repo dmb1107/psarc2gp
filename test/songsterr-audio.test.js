@@ -10,9 +10,9 @@ import { spawnSync } from "node:child_process";
 import { getAudio, PROVIDERS, needsSecrets, AudioError, describeAudioError, AUDIO_ERROR_CODES, config } from "../src/songsterr/audio/index.js";
 import { encryptSecrets, decryptSecrets } from "../src/songsterr/secrets.js";
 import { convertSongsterr } from "../src/songsterr/convert.js";
-import { timing as infoTiming } from "../src/songsterr/audio/providers/rapidapi-youtube-info-download.js";
+import { timing as mp36Timing, parseSecret } from "../src/songsterr/audio/providers/rapidapi-youtube-mp36.js";
 
-infoTiming.pollMs = 5; // the backup polls its job; no waiting in tests
+mp36Timing.pollMs = 5; // the backup asks again while a video is "processing"; no waiting in tests
 
 // MPEG-1 layer III, 128 kbit/s, 44.1 kHz frames: 1152 samples each (~26 ms)
 function mp3(frames) {
@@ -45,8 +45,7 @@ function fakeFetch(routes) {
 // Adding a provider means adding its fake answers here (the test below fails until you do).
 
 const API = "https://youtube-mp310.p.rapidapi.com/";
-const INFO = "https://youtube-info-download-api.p.rapidapi.com/";
-const PROGRESS = "https://p.savenow.example/api/progress";
+const MP36 = "https://youtube-mp36.p.rapidapi.com/";
 const FILE = "https://files.example/";
 const SCENARIOS = {
   "rapidapi-youtube-mp310": {
@@ -57,17 +56,13 @@ const SCENARIOS = {
     "not-found": () => fakeFetch([[API, json(200, { error: "Video unavailable" })]]),
     unavailable: () => fakeFetch([[API, offline]]),
   },
-  "rapidapi-youtube-info-download": {
-    secret: "test-key-456",
-    ok: (audio) => fakeFetch([
-      [INFO, json(200, { success: true, id: "v2_stream_x", progress_url: `${PROGRESS}?id=v2_stream_x` }, { "x-ratelimit-units-remaining": "496" })],
-      [PROGRESS, json(200, { success: 1, progress: 1000, text: "Finished", download_url: `${FILE}b.mp3` })],
-      [FILE, bytes(audio)],
-    ]),
-    auth: () => fakeFetch([[INFO, json(403, { message: "You are not subscribed to this API." })]]),
-    quota: () => fakeFetch([[INFO, json(429, { message: "You have exceeded the DAILY quota for Units on your current plan, BASIC." })]]),
-    "not-found": () => fakeFetch([[INFO, json(200, { success: false, message: "Video unavailable: this video is private" })]]),
-    unavailable: () => fakeFetch([[INFO, offline]]),
+  "rapidapi-youtube-mp36": {
+    secret: "test-key-456:b5196c8deb34eefe492ddc299d786b48",
+    ok: (audio) => fakeFetch([[MP36, json(200, { link: `${FILE}b.mp3`, title: "T", status: "ok", msg: "success" }, { "x-ratelimit-requests-remaining": "299" })], [FILE, bytes(audio)]]),
+    auth: () => fakeFetch([[MP36, json(403, { message: "You are not subscribed to this API." })]]),
+    quota: () => fakeFetch([[MP36, json(429, { message: "You have exceeded the MONTHLY quota for Requests on your current plan, BASIC." })]]),
+    "not-found": () => fakeFetch([[MP36, json(200, { status: "fail", msg: "Video unavailable" })]]),
+    unavailable: () => fakeFetch([[MP36, offline]]),
   },
 };
 
@@ -147,41 +142,39 @@ test("RapidAPI: the key goes in the RapidAPI headers, other answers map to codes
 
 // ---- fallback order and the file provider
 
-test("backup: polls the job until it's done, reports progress, maps a failed job", async () => {
-  const id = "rapidapi-youtube-info-download";
-  let polls = 0;
-  const steps = [{ success: 0, progress: 0, text: "Initialising" }, { success: 0, progress: 420, text: "Downloading" }, { success: 1, progress: 1000, text: "Finished", download_url: `${FILE}c.mp3` }];
-  const fetch = fakeFetch([
-    [INFO, json(200, { success: true, progress_url: `${PROGRESS}?id=1` })],
-    [PROGRESS, () => json(200, steps[Math.min(polls++, steps.length - 1)])()],
-    [FILE, bytes(MP3_10S)],
-  ]);
-  const seen = [];
-  const a = await getAudio(VIDEO, { providers: [id], secrets: { [id]: "k" }, fetch, onProgress: (e) => seen.push(e) });
+test("backup: asks again while processing, sends X-RUN with the MP3 request, maps failures", async () => {
+  const id = "rapidapi-youtube-mp36";
+  assert.deepEqual(parseSecret("k:abc"), { key: "k", xrun: "abc" });
+  assert.deepEqual(parseSecret("k"), { key: "k", xrun: null });
+  let calls = 0;
+  const steps = [{ status: "processing", progress: 10, msg: "in process" }, { status: "processing", progress: 60 }, { status: "ok", link: `${FILE}c.mp3`, msg: "success" }];
+  const fetch = fakeFetch([[MP36, () => json(200, steps[Math.min(calls++, steps.length - 1)])()], [FILE, bytes(MP3_10S)]]);
+  const a = await getAudio(VIDEO, { providers: [id], secrets: { [id]: "the-key:the-md5" }, fetch });
   assert.equal(a.provider, id);
-  assert.equal(polls, 3);
-  assert.equal(fetch.calls[0].headers["x-rapidapi-host"], "youtube-info-download-api.p.rapidapi.com");
-  assert.match(fetch.calls[0].url, /format=mp3&audio_quality=192&max_duration=30&url=https%3A%2F%2Fwww\.youtube\.com%2Fwatch%3Fv%3DdQw4w9WgXcQ/);
-  assert.ok(fetch.calls.slice(1).every((c) => !c.headers["x-rapidapi-key"]), "the key goes to RapidAPI only");
-  assert.ok(seen.some((e) => e.stage === "converting" && e.received === 420 && e.total === 1000));
-  // a job that fails, one that vanishes, and one that never finishes
-  const run = (answer) => getAudio(VIDEO, { providers: [id], secrets: { [id]: "k" }, fetch: fakeFetch([[INFO, json(200, { success: true, progress_url: `${PROGRESS}?id=2` })], [PROGRESS, answer]]) });
-  await assert.rejects(run(json(200, { success: -1, progress: 0, text: "Error: download failed" })), (e) => e.code === "failed");
-  await assert.rejects(run(json(404, { message: "Progress not found", success: false })), (e) => e.code === "failed" && /progress answered 404/.test(e.message));
-  const wait = infoTiming.maxWaitMs;
-  infoTiming.maxWaitMs = 20;
+  assert.equal(calls, 3);
+  assert.equal(fetch.calls[0].url, `${MP36}dl?id=${VIDEO}`);
+  assert.equal(fetch.calls[0].headers["x-rapidapi-key"], "the-key", "only the key part goes to RapidAPI");
+  assert.equal(fetch.calls[0].headers["x-rapidapi-host"], "youtube-mp36.p.rapidapi.com");
+  const file = fetch.calls.at(-1);
+  assert.equal(file.headers["x-run"], "the-md5");
+  assert.ok(!file.headers["x-rapidapi-key"], "the key goes to RapidAPI only");
+  // a fail, a 404 on the MP3 link without X-RUN (the hint says what's missing), and a video that never finishes
+  const run = (routes, secret = "k") => getAudio(VIDEO, { providers: [id], secrets: { [id]: secret }, fetch: fakeFetch(routes) });
+  await assert.rejects(run([[MP36, json(200, { status: "fail", msg: "Some error happened" })]]), (e) => e.code === "failed");
+  await assert.rejects(run([[MP36, json(200, { status: "ok", link: `${FILE}d.mp3` })], [FILE, () => new Response("", { status: 404 })]]), (e) => e.code === "failed" && /X-RUN/.test(e.message));
+  const wait = mp36Timing.maxWaitMs;
+  mp36Timing.maxWaitMs = 20;
   try {
-    await assert.rejects(run(json(200, { success: 0, progress: 100 })), (e) => e.code === "unavailable" && /didn't finish/.test(e.message));
-  } finally { infoTiming.maxWaitMs = wait; }
+    await assert.rejects(run([[MP36, json(200, { status: "processing" })]]), (e) => e.code === "unavailable" && /didn't finish/.test(e.message));
+  } finally { mp36Timing.maxWaitMs = wait; }
 });
 
 test("fallback: the backup gets a video the first provider's file host can't deliver; a missing backup key is passed over", async () => {
-  const first = "rapidapi-youtube-mp310", backup = "rapidapi-youtube-info-download";
+  const first = "rapidapi-youtube-mp310", backup = "rapidapi-youtube-mp36";
   const routes = [
     [API, json(200, { downloadUrl: `${FILE}broken.mp3` })],
     [`${FILE}broken.mp3`, () => json(502, { message: "Download failed. Please try again." })()],
-    [INFO, json(200, { success: true, progress_url: `${PROGRESS}?id=3` })],
-    [PROGRESS, json(200, { success: 1, progress: 1000, download_url: `${FILE}ok.mp3` })],
+    [MP36, json(200, { status: "ok", link: `${FILE}ok.mp3` })],
     [FILE, bytes(MP3_10S)],
   ];
   const a = await getAudio(VIDEO, { secrets: { [first]: "k1", [backup]: "k2" }, fetch: fakeFetch(routes) });
@@ -203,7 +196,7 @@ test("fallback: every code but auth goes on to the next provider; auth stops", a
   assert.equal(e.code, "unavailable");
   assert.equal(e.provider, id);
   assert.equal(e.fileFallback, true);
-  assert.deepEqual(e.attempts.map((a) => a.provider), [id, "rapidapi-youtube-info-download", "file"]); // the backup has no key here
+  assert.deepEqual(e.attempts.map((a) => a.provider), [id, "rapidapi-youtube-mp36", "file"]); // the backup has no key here
   // a bad key stops at once (another provider wouldn't help, and the user should hear about the key)
   e = await getAudio(VIDEO, { secrets: { [id]: "k" }, fetch: s.auth() }).catch((x) => x);
   assert.equal(e.code, "auth");
@@ -211,11 +204,11 @@ test("fallback: every code but auth goes on to the next provider; auth stops", a
   assert.match(describeAudioError(e), /refused the key/);
   // the first provider's allowance is used up, or it can't find the video: the backup is asked; when it
   // fails too, the first provider's error is the one reported
-  const backup = "rapidapi-youtube-info-download";
+  const backup = "rapidapi-youtube-mp36";
   for (const code of ["quota", "not-found"]) {
     const ok = await getAudio(VIDEO, { secrets: { [id]: "k", [backup]: "k" }, fetch: fakeFetch([...s[code]().routes, ...SCENARIOS[backup].ok(MP3_10S).routes]) });
     assert.equal(ok.provider, backup, code);
-    e = await getAudio(VIDEO, { secrets: { [id]: "k", [backup]: "k" }, fetch: fakeFetch([...s[code]().routes, [INFO, offline]]) }).catch((x) => x);
+    e = await getAudio(VIDEO, { secrets: { [id]: "k", [backup]: "k" }, fetch: fakeFetch([...s[code]().routes, [MP36, offline]]) }).catch((x) => x);
     assert.equal(e.code, code);
     assert.equal(e.provider, id);
     assert.deepEqual(e.attempts.map((a) => a.provider), [id, backup, "file"]);

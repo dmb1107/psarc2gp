@@ -9,13 +9,13 @@ import config from "./config.js";
 import { AudioError, STOPS_FALLBACK } from "./errors.js";
 import { checkAudio } from "./validate.js";
 import * as rapidapi from "./providers/rapidapi-youtube-mp310.js";
-import * as infoDownload from "./providers/rapidapi-youtube-info-download.js";
+import * as mp36 from "./providers/rapidapi-youtube-mp36.js";
 import * as file from "./providers/file.js";
 
 export { AudioError, describeAudioError, AUDIO_ERROR_CODES } from "./errors.js";
 export { config };
 
-export const PROVIDERS = Object.fromEntries([rapidapi, infoDownload, file].map((p) => [p.id, p]));
+export const PROVIDERS = Object.fromEntries([rapidapi, mp36, file].map((p) => [p.id, p]));
 
 export function provider(id) {
   const p = PROVIDERS[id];

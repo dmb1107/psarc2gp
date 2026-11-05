@@ -282,7 +282,7 @@ src/songsterr/audio/
   duration.js         MP3 and M4A duration from the bytes (no decoder needed)
   providers/
     rapidapi-youtube-mp310.js   the first provider
-    rapidapi-youtube-info-download.js   the backup (since 2026-11-05, below)
+    rapidapi-youtube-mp36.js    the backup (since 2026-11-05, below)
     file.js                     "use an audio file I have" (always available, needs no secret)
     helper.js                   our own server, if one is ever needed (contract below; not built until then)
 ```
@@ -665,16 +665,20 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
   plug-ins chosen by config, with a fallback order (§3); another API is one provider file plus a config
   change; "drop an audio file" always works; our own server has a fixed interface ready if needed.
   **Backup provider (2026-11-05):** the first provider's file host answered 502 "Download failed" on some
-  videos every time (Rqqi23n6pPE: four tries, ~5 s each), while others worked. Added RapidAPI's "YouTube
-  Info & Download API" (valsuttlej53, its own savenow.to workers; free plan 500 units a day, an MP3 is 4,
-  errors and progress checks free) after it in the config. It starts a job (`/ajax/download.php`), polls
-  the job's `progress_url` every 1.5 s (up to 4 min) and downloads `download_url`. Checked: the RapidAPI
-  gateway, the progress host and the documented file host (ricky4.savenow.to) answer pages from other
-  origins; a real conversion from the CLI (Kerosene!, 47 s, 320 kbit/s though 192 was asked for, no gapless
-  header) is sample for sample in step with the first provider's MP3, so the same 13 ms offset. Not yet
-  seen: a download in the web app (CORS on whichever file host a job gets). The fallback now goes on
-  after quota and not-found too (a backup has its own allowance; one provider's "not found" may be its own
-  failure), only auth stops; the backup is passed over while the key file has no key for it.
+  videos every time (Rqqi23n6pPE, Reichenbach Falls: four tries, ~5 s each), while others worked. The
+  backup runs after it in the config: RapidAPI's "YouTube MP3" (niketagup/youtube-mp36; free plan 300 a
+  month, hard limit, only successful conversions count). `GET /dl?id=<video>` answers `status` "ok" with a
+  `link`, "processing" (asked again every second, up to 4 min) or "fail". Its MP3 links answer 404 unless
+  the request carries `X-RUN: md5(RapidAPI username)` (seen: 404 without it), so its secret is
+  `<key>:<that md5>`; only the key goes to RapidAPI, only the md5 to the file host. Checked: a CLI
+  conversion (Kerosene!, 13 s, 128 kbit/s, Xing/LAME header with delay 576) is sample for sample in step
+  with the first provider's MP3 decoded without skipping, so offset 0 (header-reading decoders skip the
+  13 ms; unknown whether Guitar Pro does); and in Firefox, the local web app fetched Reichenbach Falls
+  from it after the first provider's 502 (the user, 2026-11-05). Tried first and dropped: RapidAPI's
+  "YouTube Info & Download API" (valsuttlej53, savenow.to): it converts, but its file hosts send no CORS
+  header on the MP3 itself (only on their JSON errors), so a page can't read the file; the CLI could. The
+  fallback now goes on after quota and not-found too (a backup has its own allowance; one provider's "not
+  found" may be its own failure), only auth stops; a backup with no key in the file is passed over.
 - **Quota.** The free plan's monthly quota is per key, and the user and friends share one key, so one busy
   user can use it up for everyone. Mitigation: `quota` gets its own message ("this month's shared audio
   allowance is used up; drop an audio file or try next month"); converted songs keep their audio, so only
