@@ -106,7 +106,8 @@ YouTube video.
 - Sync is per bar, not per beat: Songsterr times bars, not beats. A video Songsterr timed for another
   version of the tab doesn't fit and isn't offered; it's never stretched to fit. If no video fits, the
   tab still converts, without a recording. Songsterr's sync stops at the last note, so when a tab ends
-  in bars of rests on every track, those bars are left out of the file and its videos fit.
+  in bars of rests on every track, those bars are left out of the file and its videos fit. When the
+  recording goes on after the tab's last bar, rest bars are added until it ends, so it plays to the end.
 - Drum tracks become Guitar Pro drum notation with its RSE drum kit. Vocal tracks become a notation staff
   with the lyrics under the notes, kept silent (unmute one in Guitar Pro to hear the melody on a clarinet).
   Every track is ticked by default: untick the ones you don't want.

@@ -350,7 +350,7 @@ function renderVideos() {
   const others = c.info.videos.length - usable.length;
   $("ss-video-note").textContent = !usable.length
     ? `None of the ${c.info.videos.length} videos fits this revision of the tab (they were synced to another one), so the recording can't be synced. Choose "No recording" to convert the tab on its own, or try another revision on Songsterr.`
-    : [c.info.emptyBarsLeftOut && `The tab's last ${c.info.emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them, so they're left out of the file.`,
+    : [c.info.emptyBarsLeftOut && `The tab's last ${c.info.emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them, so they're left out; rest bars carry the recording to its end.`,
       others && `${others} other video${others === 1 ? " was" : "s were"} synced to another revision of the tab and can't be used.`].filter(Boolean).join(" ");
 }
 

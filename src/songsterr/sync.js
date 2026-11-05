@@ -83,6 +83,28 @@ export function emptyTail(tracks, played, videos) {
   return videos.some((v) => pointCount(v) === want) ? keep : null;
 }
 
+// The recording goes on after the tab's last bar (an ending the tab doesn't write out, or the bars
+// emptyTail left out): Guitar Pro and the player stop at the score's end, so rest bars are added until the
+// recording ends. Returns their start times in video seconds (one per added bar, in the last bar's time
+// signature), or []. They're timed at the song's closing tempo: the median seconds per quarter note of
+// the last eight played bars. Only rests, so there's no note to be out of sync; the tab's own bars keep
+// the video's points.
+//   points: one per played bar; lastEnd: the end of the last bar (syncFromPoints' endSeconds), video time;
+//   audioEnd: where the recording ends, in video time (its length minus the provider's offset)
+export function restBarsUntil(points, played, barQuarters, lastEnd, audioEnd) {
+  const n = played.length;
+  if (points.length !== n || n < 2 || !(audioEnd > lastEnd)) return [];
+  const spq = [];
+  for (let k = Math.max(0, n - 9); k < n - 1; k++) spq.push((points[k + 1] - points[k]) / barQuarters(played[k].bar));
+  spq.sort((a, b) => a - b);
+  const m = spq.length % 2 ? spq[spq.length >> 1] : (spq[spq.length / 2 - 1] + spq[spq.length / 2]) / 2;
+  const barSec = m * barQuarters(played[n - 1].bar);
+  if (!(barSec > 0)) return [];
+  // a remainder under a tenth of a bar (the recording's last fade, or rounding) gets no bar of its own
+  const count = Math.min(Math.ceil((audioEnd - lastEnd) / barSec - 0.1), 1000);
+  return Array.from({ length: Math.max(count, 0) }, (_, i) => lastEnd + i * barSec);
+}
+
 // The videos with their fit; a video with one stray point (findStrayPoint) fits with that point left
 // out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }.
 export function fitVideos(videos, quarters, writtenCount) {

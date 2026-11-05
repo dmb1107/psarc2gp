@@ -232,6 +232,12 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     chosen ones) are left out if they hold no repeat or ending and a video has exactly one point per
     played bar before them (`emptyTail` in sync.js). Every bar in the file still gets its own point; the
     form and the report say how many bars were left out. "No recording" leaves them out too (rests only).
+24. **Rest bars until the recording ends** (the user's decision, 2026-11-05: "shouldn't it have empty bars
+    until the song ends?"). Guitar Pro and the player stop at the score's end, so a recording longer than
+    the tab was cut off (Kerosene!: tab synced to 148 s of a 308 s recording). Bars of rests in the last
+    bar's time signature are added after it, each with its own sync point at the song's closing tempo
+    (median of the last eight bars; `restBarsUntil` in sync.js), until the recording ends; a remainder
+    under a tenth of a bar gets none. The tab's own bars keep the video's points. Only with a recording.
 
 ## Observations from real use
 

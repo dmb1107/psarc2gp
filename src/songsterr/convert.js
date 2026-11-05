@@ -3,7 +3,7 @@
 import * as alphaTab from "../../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, songsterrOutputName, songsterrLink, songsterrNotices } from "./bundle.js";
 import { buildAlphaTex } from "./score.js";
-import { playedBars, chooseVideo, describeVideos, fitVideos, emptyTail, syncFromPoints } from "./sync.js";
+import { playedBars, chooseVideo, describeVideos, fitVideos, emptyTail, restBarsUntil, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
 import { rewriteZipEntry } from "../gp/zip.js";
 import { syncPointsInPlayOrder } from "../gp/syncpoints.js";
@@ -20,6 +20,16 @@ function loadScore(tex) {
   return { score: alphaTab.importer.ScoreLoader.loadAlphaTex(tex, settings), settings };
 }
 
+// The tab built as a score, its played bars, and the videos with their fit (stray points left out:
+// sync.js fitVideos).
+function structureOf(bundle, tracks, warn) {
+  const built = buildAlphaTex(bundle, tracks, { warn });
+  const { score, settings } = loadScore(built.tex);
+  const played = playedBars(alphaTab, score, settings);
+  const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
+  return { built, score, settings, played, fitted: fitVideos(bundle.videos, quarters, score.masterBars.length) };
+}
+
 // The structure step on its own (no audio): played bars and the videos that fit. Used to list videos
 // and by the web app before it fetches any audio.
 export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = () => {} } = {}) {
@@ -27,14 +37,7 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
   const indices = tracks ?? defaultTrackIndices(bundle);
   if (!indices.length) throw new Error(tracks ? "no tracks chosen" : "all of this song's tracks are empty");
   const data = await loadTracks(bundle, indices, { fetch });
-  const structure = (tracks) => {
-    const built = buildAlphaTex(bundle, tracks, { warn });
-    const { score, settings } = loadScore(built.tex);
-    const played = playedBars(alphaTab, score, settings);
-    const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
-    // fitted: the videos with their fit, stray points left out (sync.js fitVideos)
-    return { built, score, settings, played, fitted: fitVideos(bundle.videos, quarters, score.masterBars.length) };
-  };
+  const structure = (tracks) => structureOf(bundle, tracks, warn);
   let kept = data, emptyBarsLeftOut = 0;
   let r = structure(data);
   if (!r.fitted.some((v) => v.fit)) {
@@ -65,9 +68,11 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
 export async function convertSongsterr(bundle, { tracks = null, video = "default", audio = null, rse = true, mute = true, fetch, onWarning = () => {} } = {}) {
   const warnings = [];
   const warn = (m) => { warnings.push(m); onWarning(m); };
-  const { built, score, settings, played, fitted, emptyBarsLeftOut } = await inspectSongsterr(bundle, { tracks, fetch, warn });
-  const written = score.masterBars.length;
-  if (emptyBarsLeftOut) warn(`the tab's last ${emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them: they were left out (the file ends at bar ${written})`);
+  const inspected = await inspectSongsterr(bundle, { tracks, fetch, warn });
+  let { built, score, settings, played } = inspected;
+  const { fitted, emptyBarsLeftOut, kept } = inspected;
+  let written = score.masterBars.length;
+  if (emptyBarsLeftOut) warn(`the tab's last ${emptyBarsLeftOut} bars are rests on every track and the videos' sync stops before them: they were left out`);
   let chosen = null;
   try {
     chosen = chooseVideo(fitted, video, played.length, written);
@@ -84,7 +89,25 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   if (typeof audio === "function") audio = await audio({ videoId: chosen.videoId, feature: chosen.feature ?? "default", lastPoint: chosen.points.at(-1) });
 
   const barQuarters = (i) => score.masterBars[i].calculateDuration() / QUARTER_TICKS;
-  const sync = chosen && syncFromPoints(chosen.points, played, barQuarters, { writtenCount: written, offsetMs: audio?.offsetMs ?? 0 });
+  const offsetMs = audio?.offsetMs ?? 0;
+  let points = chosen?.points;
+  let sync = chosen && syncFromPoints(points, played, barQuarters, { writtenCount: written, offsetMs });
+  // the recording goes on after the tab: rest bars until it ends (sync.js restBarsUntil)
+  let restBarsAdded = 0;
+  if (sync && audio?.seconds != null) {
+    const more = restBarsUntil(points, played, barQuarters, sync.endSeconds, audio.seconds - offsetMs / 1000);
+    if (more.length) {
+      const padded = kept.map((d) => ({ ...d, data: { ...d.data, measures: [...d.data.measures, ...more.map(() => ({ voices: [] }))] } }));
+      const r = structureOf(bundle, padded, () => {});
+      if (r.played.length !== played.length + more.length) throw new Error(`adding ${more.length} rest bars gave ${r.played.length} played bars, not ${played.length + more.length}`);
+      ({ built, score, settings, played } = r);
+      written = score.masterBars.length;
+      points = [...points, ...more];
+      restBarsAdded = more.length;
+      sync = syncFromPoints(points, played, barQuarters, { writtenCount: written, offsetMs });
+      warn(`the recording goes on ${(audio.seconds - offsetMs / 1000 - more[0]).toFixed(1)} s after the tab's last bar: ${more.length} rest bar(s) added at the song's closing tempo (the file ends at bar ${written})`);
+    }
+  }
   if (sync) score.applyFlatSyncPoints(sync.flat);
   score.notices = songsterrNotices(bundle, chosen);
 
@@ -119,6 +142,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
       bars: written,
       playedBars: played.length,
       emptyBarsLeftOut,
+      restBarsAdded,
       syncPoints: sync?.flat.length ?? 0,
       video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null },
       audioSeconds: audio?.seconds ?? null,

@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
-import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail } from "../src/songsterr/sync.js";
+import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo } from "../src/songsterr/audio/duration.js";
 
@@ -277,7 +277,7 @@ test("convert: empty bars after the videos' last point are left out, decided on 
   assert.equal(r.report.emptyBarsLeftOut, 2);
   assert.equal(r.report.video.videoId, "four");
   assert.equal(r.report.syncPoints, 5);
-  assert.match(warnings.join("\n"), /last 2 bars are rests on every track.*left out \(the file ends at bar 4\)/);
+  assert.match(warnings.join("\n"), /last 2 bars are rests on every track.*left out/);
   const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
   assert.equal(back.masterBars.length, 4);
   assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [0, 2000, 4000, 6000]);
@@ -285,6 +285,41 @@ test("convert: empty bars after the videos' last point are left out, decided on 
   const whole = await inspectSongsterr(bundle([gtr, bass], [video(evenPoints(6)), video(evenPoints(4))]));
   assert.equal(whole.emptyBarsLeftOut, 0);
   assert.equal(whole.score.masterBars.length, 6);
+});
+
+test("rest bars until the recording ends, at the closing tempo", () => {
+  const played = Array.from({ length: 10 }, (_, bar) => ({ bar, occurrence: 0 }));
+  const q = () => 4;
+  // 2 s bars, the last one ends at 20 s: a recording to 25 s gets three more (20, 22, 24)
+  assert.deepEqual(restBarsUntil(evenPoints(10, 2), played, q, 20, 25), [20, 22, 24]);
+  assert.deepEqual(restBarsUntil(evenPoints(10, 2), played, q, 20, 20.1), []); // a twentieth of a bar: nothing
+  assert.deepEqual(restBarsUntil(evenPoints(10, 2), played, q, 20, 19), []); // ends before the tab does
+  // the closing tempo is the median of the last bars: one odd bar doesn't change it
+  const odd = [...evenPoints(9, 2), 17.2];
+  assert.deepEqual(restBarsUntil(odd, played, q, 19.2, 23), [19.2, 21.2]);
+  // a 3/4 last bar gets 3/4 bars of the same tempo; a video with one point per written bar gets none
+  assert.deepEqual(restBarsUntil(evenPoints(10, 2), played, (i) => (i === 9 ? 3 : 4), 19.5, 21), [19.5]);
+  assert.deepEqual(restBarsUntil(evenPoints(8, 2), played, q, 20, 25), []);
+});
+
+test("convert: the recording goes on after the tab → rest bars with their own sync points", async () => {
+  const noteBar = () => bar([beat(1, [note(3, 1)])]);
+  const b = bundle([track([noteBar(), noteBar(), noteBar(), noteBar()])], [video(evenPoints(4, 2, 1), { videoId: "v" })]);
+  const audio = { bytes: syntheticMp3(10), format: "mp3", seconds: 14, provider: "file", offsetMs: 0 };
+  const warnings = [];
+  const r = await convertSongsterr(b, { audio, onWarning: (w) => warnings.push(w) });
+  // the tab's bars end at 9 s; 5 s more = 2.5 bars → 3 rest bars
+  assert.equal(r.report.restBarsAdded, 3);
+  assert.equal(r.report.bars, 7);
+  assert.equal(r.report.syncPoints, 8);
+  assert.match(warnings.join("\n"), /goes on 5\.0 s after the tab's last bar: 3 rest bar\(s\) added/);
+  const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
+  assert.equal(back.masterBars.length, 7);
+  assert.deepEqual(back.masterBars.map((m) => m.syncPoints?.[0]?.syncPointValue.millisecondOffset), [1000, 3000, 5000, 7000, 9000, 11000, 13000]);
+  assert.ok(back.tracks[0].staves[0].bars.slice(4).every((x) => x.voices[0].beats.every((bt) => bt.isRest)));
+  // no recording, or one that ends with the tab: nothing added
+  assert.equal((await convertSongsterr(b, { audio: null })).report.restBarsAdded, 0);
+  assert.equal((await convertSongsterr(b, { audio: { ...audio, seconds: 9 } })).report.restBarsAdded, 0);
 });
 
 test("convert: no video fits → the tab still converts without a recording (no sync points), never with one", async () => {
@@ -307,7 +342,7 @@ test("convert: no video fits → the tab still converts without a recording (no 
 test("convert: repeats synced per pass, negative first point becomes FramePadding, name has the suffix", async () => {
   const t = track([restBar({ repeatStart: true }), restBar({ repeat: 2 }), restBar()]);
   const b = bundle([t], [video(evenPoints(5, 2, -1.5), { videoId: "early" })]);
-  const audio = { bytes: syntheticMp3(10), format: "mp3", seconds: 10, provider: "file" };
+  const audio = { bytes: syntheticMp3(10), format: "mp3", seconds: 8.5, provider: "file" }; // ends with the last bar
   const r = await convertSongsterr(b, { audio });
   assert.equal(r.name, "Artist - Title (Songsterr).gp");
   assert.equal(r.report.playedBars, 5);

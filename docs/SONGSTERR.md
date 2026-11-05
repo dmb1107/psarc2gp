@@ -108,6 +108,10 @@ changes.
    no repeat or alternate ending, are played once each at the end, and a video then has one point per
    played bar (`emptyTail` in sync.js; inspectSongsterr loads every track with notes to decide). Checked:
    verify-songsterr finds every note of all five tracks, 81 sync points, every video at 100%.
+   **The recording outlasts the tab** (same song): the tab is synced to 148 s of a 308 s recording, and
+   Guitar Pro stopped at the score's end. Since 2026-11-05 rest bars follow until the recording ends, at
+   the closing tempo (`restBarsUntil`; PRODUCT.md decision 24): Kerosene! gets 88, 168 bars and 169 sync
+   points, the last bar ending at 309.3 s.
 4. **Points can be negative** (a video that starts after the tab's beginning: one alternative starts at
    −12.64 s), which means a positive `FramePadding`.
 5. **Songsterr's API refuses automated clients.** After about a dozen scripted requests, `api/meta`
