@@ -1,7 +1,9 @@
 # Songsterr songs → synced Guitar Pro files: plan
 
-Status: **plan agreed in outline, not built** (2026-11-04). Every part has been tried end to end in
-throwaway experiments (lab pages in `.samples/songsterr-lab/`, git-ignored): Songsterr data by bookmarklet,
+Status: **step 1 built** (2026-11-04): `src/songsterr/` converts a saved bundle with the CLI
+(`--audio file` or `--no-audio`), tested on five real songs; **the user heard UNDERWATER BOI in GP8 and it "sounds great"** (2026-11-05). Alternate
+endings and triplet feel are handled (seen 2026-11-05); D.S./D.C./coda/fine are deferred until a real tab
+with one turns up (see "Order of work"). Before building, every part was tried end to end in throwaway experiments (lab pages in `.samples/songsterr-lab/`, git-ignored): Songsterr data by bookmarklet,
 audio by conversion API, a `.gp` in Guitar Pro 8. No hosting needed. Product intent for the rest of the project is in
 [PRODUCT.md](PRODUCT.md); this document adds a second input, replaces decision 5 there (".psarc is the only
 input") and becomes decisions 15+ when built.
@@ -82,8 +84,10 @@ changes.
 5. **Songsterr's API refuses automated clients.** After about a dozen scripted requests, `api/meta`
    returned 403 to every non-browser request for over an hour while a real browser on the same connection
    got the data; the CDN kept answering plain requests. Hence the bookmarklet design above.
-6. **Anacrusis:** Enter Sandman's track JSON has `anacrusis: true` with bar 0 a whole rest in 4/4, and the
-   default video gives bar 0 only 0.26 s. Needs handling (see Sync).
+6. **Anacrusis:** Enter Sandman's track JSON has `anacrusis: true`, and bar 0 holds an **eighth-note pickup**
+   in 4/4 (a rest on most tracks, the open E on the clean guitar; an earlier note here said "a whole rest",
+   which is bar 1). The default video gives bar 0 0.26 s, an eighth at ~115 bpm, so the points agree. Written
+   with alphaTex's `\ac`, alphaTab makes bar 0 an eighth long (480 ticks) and the points fit as they are.
 7. **`backing` videos name the tracks they leave out** (`tracks: [4]` = no drums, `[0, 1]` = no guitars):
    useful for "play along without your part".
 8. **Tab JSON is clean to convert.** Durations are rationals (`[1, 8]`, `[3, 8]` dotted, `[1, 24]` +
@@ -91,13 +95,43 @@ changes.
    `signature`, `marker` (sections), `repeatStart`, `repeat` (count). Seen on guitar/bass: ties, slides,
    hammer/pull (`hp`), bends, vibrato, palm mute, let ring, dead and ghost notes, accents, staccato,
    harmonics, grace notes, tremolo bar, wah; tempo automations per track.
-   **Not yet seen:** alternate endings (voltas) and jumps (D.S., D.C., coda, fine). Neither test song has
-   them. They change which bars are played, so the point mapping depends on them: find a song with each,
-   save its bundle, and record the field names here before writing the mapping.
+   `duration` is the exact length; `type` (1, 2, 4, …), `dots` and `tuplet` are the written value, so
+   alphaTex gets the written value and `duration` is only used to check bar lengths. Grace notes
+   (`graceNote: "onBeat" | "beforeBeat"`) have a duration that doesn't count toward the bar, as in Guitar
+   Pro. Also seen (Enter Sandman): `letRing`, `wahwah`, `brushStroke`, `upStroke`/`downStroke`,
+   `gradualVelocity`, `text`, `leftHandVibrato` (`slight`/`wide`), `accentuated` (1 accent, 2 heavy),
+   `harmonic` + `harmonicFret` (fractional, e.g. 2.4), slide kinds `shift`, `legato`, `below`,
+   `belowlegato`, `downwards`, `upwards`; `keySignature` on bars; drums' notes as `fret` = MIDI drum note
+   with `string` −0.5. Triplet groups mix values (a dotted half + an eighth, a whole + a quarter + …):
+   alphaTab 1.8.4 loads and renders them (render-check on both songs).
+   The CDN sends the JSON gzip-encoded (`Content-Encoding: gzip`): browsers and `fetch` decode it, plain
+   `curl` needs `--compressed`.
+   **Alternate endings** (Für Elise, songsterr.com s382321, revision 9930364): `alternateEnding: [1]`,
+   `[2]` (the passes that play the bar; several numbers allowed) and the `repeat: 2` sign on the last bar
+   of the 1st ending, as in Guitar Pro; with no `repeatStart` before it the repeat goes back to bar 1.
+   alphaTab plays that layout as it is (`\ae` on each ending bar, `\rc` on the 1st ending). Played bars:
+   1–9, 1–8, 10; 127 in all, and the default video's 127 points fit (bar 9, a 1/4 bar, gets 1.01 s and
+   bar 1's second pass, 1/8, 0.64 s, so the mapping is right). Its ten alternative videos have 126 points:
+   made for an older revision, they don't fit. Also in that tab: piano tracks (`isPiano`, instrument 0,
+   laid out on a six-string "tuning" an octave apart per staff), `clef: "F4"` on the lower staff's bar 1,
+   bar rests stored as `voice.rest` with one whole rest whatever the time signature (3/8 here; Enter
+   Sandman's pickup bar has `voice.rest` with a correct eighth), and `sustainPedal` on beats (not
+   converted). Lágrima (s35828) writes its D.C. al Fine out as bars, so it has no jump field.
+   **Triplet feel** (Autumn Leaves, s463684): `tripletFeel: "8th"` on bar 1 only, kept until changed,
+   written as `\tf triplet-8th` (alphaTex carries it forward the same way; the `.gp` gets Triplet8th on
+   every bar). `"16th"` is assumed by analogy; the value that turns it off isn't seen yet (an unknown
+   value is left out with a warning). Swing doesn't move bar lines, so the sync is unaffected.
+   **Not yet seen:** jumps (D.S., D.C., coda, fine). Until a saved bundle shows their field names, the
+   converter refuses any bar field it doesn't know (it may change the played order) with a message asking
+   for the bundle; the lab page `.samples/songsterr-lab/save.html` saves one and lists unknown bar fields.
 9. **alphaTab already writes the sync, repeats included.** A test score with a repeated bar and
    `\sync (bar occurrence ms ratio)` exported `BarOccurrence` 0/1, a separate `ModifiedTempo` for the
    slower second pass (96 vs 120, correct) and `FramePadding` from the first point. So the psarc pipeline
    (alphaTex → alphaTab → `.gp` → RSE rewrite) works for Songsterr with no hand-written GPIF code.
+   **alphaTab 1.8.4's playback follows alternate endings and D.C./D.S./coda/fine** (its
+   `MidiPlaybackController`; tested with `\ae` and `\jump` in test/songsterr.test.js), so jumps need no
+   writing out. A negative first point gives a positive `FramePadding` (−12.64 s → 557424 frames), a
+   positive one a negative padding (0.07 s → −3087).
 10. **Audio format:** alphaTab embeds the audio bytes as they are; Guitar Pro detects the format. User check
     in GP8: **MP3 and M4A (AAC) play and stay on the clicks; Ogg Opus and WebM Opus don't play.** So
     YouTube's M4A stream is embedded as downloaded, no transcoding.
@@ -126,7 +160,9 @@ self-contained; it sends nothing anywhere but the user's own web app tab.
 
 ### 2. Converter core: `src/songsterr/` (platform-neutral, like the rest of `src/`)
 
-- **bundle.js**: validate a bundle (kind, version, song/revision IDs present, points shaped right); fetch
+- **bundle.js** (built): bundle format version 1 (`kind: "psarc2gp-songsterr"`, `song`, `videos` with
+  their points, `cdn`, optional `trackData` indexed like `song.tracks`; documented at the top of the file);
+  validate a bundle (kind, version, song/revision IDs present, points shaped right); fetch
   each wanted track's JSON from the CDN (`fetch` passed in).
 - **score.js**: Songsterr JSON → alphaTex, written for Songsterr data rather than bent to fit
   Rocksmith's: bars, time signatures, tempo automations, sections, repeats, rational durations → alphaTex
@@ -138,13 +174,12 @@ self-contained; it sends nothing anywhere but the user's own web app tab.
   - pick the video: the default entry if its point count matches; otherwise a matching `alternative`
     (all countries first); `backing` and the other kinds when asked for. Non-matching entries are listed as
     unusable, never stretched to fit.
-  - map points to played bars in alphaTab's playback order → `\sync (bar occurrence ms 0)` (ratio 0 = bar
-    start, as the psarc code writes it). Playback order means repeats expanded, **alternate endings taken
-    on their pass, and jumps (D.S./D.C./coda/fine) followed**. Compute the order once, in one function, and
-    check it against alphaTab's own (its MIDI generator's bar sequence) in a test, so the two never drift;
-    if alphaTab 1.8.4 doesn't follow jumps, write the jumps out as plain bars or refuse the song with a clear
-    message rather than sync it wrong. If a song's points ever equal the written-bar count instead, map one
-    per written bar; anything else is refused for that video.
+  - map points to played bars in alphaTab's playback order (built: `playedBars` in sync.js reads the
+    order from alphaTab's MIDI generator, `tickLookup.masterBars`, so ours can't drift from what alphaTab
+    and Guitar Pro play) and apply them with `score.applyFlatSyncPoints` (bar start, ratio 0). Playback
+    order means repeats expanded, alternate endings taken on their pass, jumps followed. If a song's
+    points ever equal the written-bar count instead, they're mapped to first passes; anything else is
+    refused for that video.
   - last bar: end time = its start + its written length at the previous bar's audio tempo. (The lab's
     `audio.html` reused the previous bar's audio length instead, which is wrong when the last bar's length
     differs.)
@@ -386,14 +421,28 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
 
 ## Order of work
 
-0. Before code: save bundles (with track JSON) for a song with alternate endings and one with a D.S./coda,
-   record their field names in finding 8, and check whether alphaTab 1.8.4's playback follows jumps.
-   The lab bookmarklet needs only the "include tracks" addition for this.
-1. `src/songsterr/` core (bundle, score with sync and played order, convert) + CLI reading a saved bundle
-   with `--audio file`; tests. psarc snapshot unchanged against the baseline. First real check:
-   UNDERWATER BOI bass with **real notes** and its default video, played by the user in GP8 (the
-   placeholder test was "hard to tell").
-2. `src/songsterr/audio/` (contract, config, shared checks, duration.js, the RapidAPI and file providers,
+0. **Done, jumps deferred** (2026-11-05). Alternate endings and triplet feel are seen and handled (finding 8);
+   alphaTab follows jumps (finding 9). No tab with a D.S./D.C./coda/fine was found (classical and jazz
+   candidates write the returns out as bars), so jumps wait for one: until then a tab with an unknown bar
+   field stops with a message asking for its bundle, then its field names go in finding 8 and map to `\jump`.
+   The lab page `.samples/songsterr-lab/save.html` (git-ignored; served by `npm run web` at
+   `/.samples/songsterr-lab/save.html`) has a bookmarklet that saves a v1 bundle with every track and lists
+   unknown bar fields.
+1. **Built** (2026-11-04): `src/songsterr/` core (bundle, score, sync, convert) + CLI reading a saved
+   bundle with `--audio file` / `--no-audio`, `--video`, `--list-videos`, `--tracks`;
+   test/songsterr.test.js (unit tests, plus the real bundles in `.samples/songsterr/` when present); psarc
+   snapshot identical to the baseline (15/15); render-check clean on both songs. Guesses to confirm on
+   more songs: tempo automations' `position` (read as a beat within the bar; only 0 seen) and `type`
+   (the bpm's note value), `keySignature.accidentalCount` sign (negative = flats), `hp` marking the
+   hammer/pull origin note (as Guitar Pro stores it). Still open: drums, vocals.
+   **Listening check passed** (2026-11-05): UNDERWATER BOI, all three tracks with real notes, the default
+   video's audio as an MP3 (48 kHz, Lavc, 3:05) given with `--audio`; the user played it in GP8:
+   "sounds great", repeats included. A rough onset measurement (spectral flux against the points' beat
+   grid) had put the attacks about 40 ms before the beats over most of the song, with a weak peak: either
+   it's inaudible or the measurement was off, so no offset correction for now.
+2. `src/songsterr/audio/` (contract, config, shared checks, duration.js (**built**: MP3 Info/Xing/VBRI/
+   LAME and frame counting, M4A mdhd/mvhd/mehd/sidx; checked against macOS `afinfo` on the format-test
+   files), the RapidAPI and file providers,
    contract tests) and `tools/encrypt-secrets.js` (on the dedicated RapidAPI account's key); used by the
    CLI. Measure the provider's MP3 offset and record it in config.js.
 3. The real bookmarklet + the web app's Songsterr page: settings panel and unlocking (prompt, invite link

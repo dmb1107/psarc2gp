@@ -1,0 +1,317 @@
+// Songsterr tab JSON -> alphaTex (notation + tab for each chosen track, bar structure, sections).
+//
+// Songsterr's data is already rhythmic notation (it comes from Guitar Pro-style editing): every beat has
+// a note value (`type`), `dots`, an optional `tuplet`, and its exact length as a rational `duration`
+// ([1, 8] = an eighth). Strings count from the highest (0); tuning is listed high to low as MIDI numbers.
+// So this is a translation, not the timing analysis the .psarc path needs.
+//
+// Sync points are not written here: convert.js maps the video's points onto alphaTab's own played-bar
+// order after loading this alphaTex (see sync.js).
+import { trackKind } from "./bundle.js";
+
+const q = (s) => `"${String(s ?? "").replace(/["\\]/g, "'").replace(/\s+/g, " ").trim()}"`;
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+export const pitchName = (midi) => `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
+
+// Bar fields that don't change which bars are played, and the ones handled (repeats, alternate endings).
+// Anything else (D.S./D.C./coda directions, …) may change the played-bar order the sync points are counted
+// in; until those fields are seen in real data and handled, a bar carrying one stops the conversion
+// instead of syncing it wrong.
+const BAR_FIELDS_LAYOUT = new Set(["voices", "keySignature", "rest", "marker", "signature", "tripletFeel", "width", "text", "clef"]);
+// swing, set on the bar where it starts and kept until changed (seen: "8th", Autumn Leaves s463684);
+// alphaTex's \tf carries forward the same way. Guitar Pro plays it; the written notes stay straight.
+const TRIPLET_FEELS = { "8th": "triplet-8th", "16th": "triplet-16th", none: "none", off: "none" };
+const BAR_FIELDS_HANDLED = new Set(["repeatStart", "repeat", "alternateEnding"]);
+// Songsterr clef names (seen: "F4" on a piano's lower staff) → alphaTex
+const CLEFS = { G2: "G2", F4: "F4", C3: "C3", C4: "C4", treble: "G2", bass: "F4", alto: "C3", tenor: "C4", neutral: "Neutral" };
+
+const VALUES = new Set([1, 2, 4, 8, 16, 32, 64, 128]);
+// major keys by accidental count, -7 (7 flats) .. +7 (7 sharps)
+const KEYS = ["cb", "gb", "db", "ab", "eb", "bb", "f", "c", "g", "d", "a", "e", "b", "f#", "c#"];
+
+// Guitar Pro RSE sound for a track (keys of src/gp/rse.js SOUNDS), from its General MIDI instrument
+export function soundFor(meta) {
+  const kind = trackKind(meta);
+  if (kind === "bass") return "bass";
+  const p = meta.instrumentId;
+  if (p === 30) return "distortion";
+  if (p === 29) return "overdrive";
+  if (p === 24 || p === 25) return "acoustic";
+  return "clean";
+}
+
+// Bar-level structure shared by all tracks, from the first track (Songsterr keeps bars identical across
+// tracks; differences are reported).
+export function readStructure(tracks, { warn = () => {} } = {}) {
+  const ref = tracks[0].data;
+  const n = ref.measures.length;
+  for (const t of tracks.slice(1)) {
+    if (t.data.measures.length !== n) throw new Error(`${t.meta.name}: ${t.data.measures.length} bars, but ${tracks[0].meta.name} has ${n}`);
+  }
+  const unknown = new Map();
+  let sig = [4, 4];
+  let openRepeat = null;
+  let afterRepeat = false;
+  const bars = ref.measures.map((m, i) => {
+    for (const k of Object.keys(m)) {
+      if (!BAR_FIELDS_LAYOUT.has(k) && !BAR_FIELDS_HANDLED.has(k)) unknown.set(k, [...(unknown.get(k) ?? []), i + 1]);
+    }
+    if (Array.isArray(m.signature)) sig = m.signature;
+    const bar = { index: i, num: sig[0], den: sig[1], tsChange: Array.isArray(m.signature) || i === 0 };
+    if (m.marker?.text) bar.section = m.marker.text;
+    if (m.tripletFeel !== undefined) {
+      const tf = m.tripletFeel ? TRIPLET_FEELS[m.tripletFeel] : "none";
+      if (tf) bar.tripletFeel = tf;
+      else warn(`bar ${i + 1}: triplet feel ${JSON.stringify(m.tripletFeel)} isn't known; left out`);
+    }
+    if (m.keySignature && Number.isInteger(m.keySignature.accidentalCount)) bar.key = m.keySignature.accidentalCount;
+    if (m.repeatStart) { bar.repeatStart = true; openRepeat = i; }
+    // alternate endings: the numbers of the passes that play this bar; the repeat sign that sends the
+    // player back sits on the last bar of the 1st ending, as in Guitar Pro (alphaTab plays that layout)
+    if (m.alternateEnding !== undefined) {
+      const e = m.alternateEnding;
+      if (!Array.isArray(e) || !e.length || !e.every((x) => Number.isInteger(x) && x >= 1 && x <= 8)) throw new Error(`bar ${i + 1}: alternate ending ${JSON.stringify(e)} isn't a list of pass numbers`);
+      bar.endings = [...e].sort((a, b) => a - b);
+    }
+    if (m.repeat) {
+      bar.repeatCount = Math.max(2, m.repeat);
+      // a repeat without a start goes back to bar 1, the usual reading for the song's first repeat
+      if (openRepeat === null && afterRepeat) warn(`bar ${i + 1}: repeat end without a start; repeating from bar 1`);
+      openRepeat = null;
+      afterRepeat = true;
+    }
+    return bar;
+  });
+  for (const t of tracks.slice(1)) {
+    t.data.measures.forEach((m, i) => {
+      const a = bars[i];
+      if (!!m.repeatStart !== !!a.repeatStart || (m.repeat ?? 0) !== (ref.measures[i].repeat ?? 0) ||
+        JSON.stringify(m.alternateEnding ?? null) !== JSON.stringify(ref.measures[i].alternateEnding ?? null)) {
+        throw new Error(`${t.meta.name}: bar ${i + 1}'s repeats differ from ${tracks[0].meta.name}'s`);
+      }
+    });
+  }
+  if (unknown.size) {
+    const list = [...unknown].map(([k, at]) => `"${k}" (bar ${at.slice(0, 3).join(", ")}${at.length > 3 ? ", …" : ""})`).join(", ");
+    throw new Error(`this tab uses bar fields psarc2gp doesn't know yet: ${list}. They may change which bars are played ` +
+      "(D.S./D.C./coda directions), so the sync points can't be placed safely. Please save the bundle and report it.");
+  }
+  bars.anacrusis = !!ref.anacrusis;
+  const tempo = (ref.automations?.tempo ?? []).filter((a) => isFinite(a.bpm) && a.measure >= 0 && a.measure < n);
+  for (const a of tempo) {
+    const b = bars[a.measure];
+    // bpm is per `type` note value (4 = quarter); alphaTab tempos are quarter notes per minute
+    const bpm = Math.round((a.bpm * 4) / (a.type || 4) * 100) / 100;
+    // position: beat within the bar (not seen other than 0 yet)
+    const ratio = a.position > 0 ? Math.min(0.99, a.position / b.num) : 0;
+    (b.tempo ??= []).push({ bpm, ratio });
+  }
+  if (!bars[0].tempo) bars[0].tempo = [{ bpm: 120, ratio: 0 }];
+  return bars;
+}
+
+// One beat's note value in alphaTex: "8", plus {d}/{dd} and {tu 3} as beat effects
+function valueOf(beat, where) {
+  const type = beat.type;
+  if (!VALUES.has(type)) throw new Error(`${where}: note value 1/${type} isn't supported`);
+  const eff = [];
+  if (beat.dots === 1) eff.push("d");
+  else if (beat.dots === 2) eff.push("dd");
+  if (beat.tuplet && beat.tuplet > 1) eff.push(`tu ${beat.tuplet}`);
+  return { dur: String(type), eff };
+}
+
+const quarterTones = (tone) => Math.round(tone / 25); // Songsterr/Guitar Pro: 100 = a whole tone
+const pointsTex = (points) => {
+  const pts = points.filter((p) => isFinite(p.position) && isFinite(p.tone));
+  return pts.map((p) => `${Math.max(0, Math.min(60, Math.round(p.position)))} ${quarterTones(p.tone)}`).join(" ");
+};
+
+// "shift", "legato", "downwards"/"upwards" (slide out), "below"/"above" (slide in), and combinations
+// such as "belowlegato" (slide in from below, legato slide to the next note)
+const SLIDE_IN = { below: "sib", above: "sia" };
+const SLIDE_OUT = { shift: "ss", legato: "sl", downwards: "sod", upwards: "sou" };
+function slideEffects(slide, stats) {
+  let s = String(slide);
+  const eff = [];
+  const inKey = Object.keys(SLIDE_IN).find((k) => s.startsWith(k));
+  if (inKey) { eff.push(SLIDE_IN[inKey]); s = s.slice(inKey.length); }
+  if (s && SLIDE_OUT[s]) eff.push(SLIDE_OUT[s]);
+  else if (s) stats.unsupported.add(`slide "${slide}"`);
+  return eff;
+}
+
+const HARMONICS = { natural: "nh", artificial: "ah", pinch: "ph", tap: "th", semi: "sh", feedback: "fh" };
+
+function noteTex(n, beat, nStrings, stats) {
+  const string = n.string + 1; // Songsterr 0 = highest string; alphaTex 1 = highest
+  if (!(string >= 1 && string <= nStrings)) { stats.skippedNotes++; return null; }
+  const fret = Math.max(0, Math.round(n.fret ?? 0));
+  const eff = [];
+  if (n.tie) eff.push("t");
+  if (n.dead) eff.push("x");
+  if (n.ghost) eff.push("g");
+  if (n.hp) eff.push("h");
+  if (n.slide) eff.push(...slideEffects(n.slide, stats));
+  if (n.vibrato || n.leftHandVibrato === "slight") eff.push("v");
+  else if (n.leftHandVibrato === "wide") eff.push("vw");
+  if (n.accentuated === 2) eff.push("hac");
+  else if (n.accentuated) eff.push("ac");
+  if (n.staccato) eff.push("st");
+  if (n.harmonic) {
+    const h = HARMONICS[n.harmonic];
+    // alphaTex numbers here are integers ("2.4" would read as fret.string); fractional harmonic frets
+    // (2.4, 3.2, 5.8: nodes between frets) are written without a value
+    if (h) eff.push(h === "ah" && Number.isInteger(n.harmonicFret) ? `ah ${n.harmonicFret}` : h);
+    else stats.unsupported.add(`harmonic "${n.harmonic}"`);
+  }
+  if (n.bend?.points?.length && !n.tie) {
+    const pts = pointsTex(n.bend.points);
+    if (pts) eff.push(`be (${pts})`);
+  }
+  if (beat.palmMute) eff.push("pm");
+  if (beat.letRing) eff.push("lr");
+  for (const k of Object.keys(n)) if (!NOTE_FIELDS.has(k)) stats.unsupported.add(k);
+  stats.notes++;
+  return `${fret}.${string}${eff.length ? `{${eff.join(" ")}}` : ""}`;
+}
+const NOTE_FIELDS = new Set(["fret", "string", "tie", "dead", "ghost", "hp", "slide", "vibrato", "leftHandVibrato", "accentuated", "staccato", "harmonic", "harmonicFret", "bend", "rest"]);
+const BEAT_FIELDS = new Set(["notes", "type", "duration", "dots", "tuplet", "tupletStart", "tupletStop", "rest", "beamStart", "beamStop",
+  "palmMute", "letRing", "graceNote", "tremoloBar", "brushStroke", "upStroke", "downStroke", "velocity", "gradualVelocity", "text",
+  "wahwah", "vibrato", "vibratoWithTremoloBar", "chord"]);
+const DYNAMICS = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"]);
+
+function beatTex(beat, nStrings, stats, where, state) {
+  const { dur, eff } = valueOf(beat, where);
+  if (beat.graceNote) eff.push(beat.graceNote === "onBeat" ? "gr ob" : "gr bb");
+  if (beat.velocity && DYNAMICS.has(beat.velocity) && beat.velocity !== state.dynamics) {
+    eff.push(`dy ${beat.velocity}`);
+    state.dynamics = beat.velocity;
+  }
+  if (beat.gradualVelocity === "crescendo") eff.push("cre");
+  else if (beat.gradualVelocity === "decrescendo") eff.push("dec");
+  if (beat.text?.text) eff.push(`txt ${q(beat.text.text)}`);
+  if (beat.wahwah === "open") eff.push("waho");
+  else if (beat.wahwah === "closed") eff.push("wahc");
+  if (beat.brushStroke?.direction === "down") eff.push("bd");
+  else if (beat.brushStroke?.direction === "up") eff.push("bu");
+  else if (beat.upStroke) eff.push("su");
+  else if (beat.downStroke) eff.push("sd");
+  if (beat.vibratoWithTremoloBar === "wide") eff.push("vw");
+  else if (beat.vibratoWithTremoloBar) eff.push("v");
+  if (beat.tremoloBar?.points?.length) {
+    const pts = pointsTex(beat.tremoloBar.points);
+    if (pts) eff.push(`tbe (${pts})`);
+  }
+  for (const k of Object.keys(beat)) if (!BEAT_FIELDS.has(k)) stats.unsupported.add(k);
+  const effTex = eff.length ? `{${eff.join(" ")}}` : "";
+
+  const notes = (beat.notes ?? []).filter((n) => !n.rest).map((n) => noteTex(n, beat, nStrings, stats)).filter(Boolean);
+  if (!notes.length) {
+    if (beat.graceNote) return ""; // a grace "rest" means nothing
+    return `r.${dur}${effTex}`;
+  }
+  if (beat.graceNote) stats.graceNotes++;
+  return `${notes.length === 1 ? notes[0] : `(${notes.join(" ")})`}.${dur}${effTex}`;
+}
+
+// exact bar length check (grace notes take no time, as in Guitar Pro)
+const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
+function addFrac([a, b], [c, d]) { const n = a * d + c * b, m = b * d, g = gcd(n, m) || 1; return [n / g, m / g]; }
+
+export function buildAlphaTex(bundle, tracks, { warn = () => {} } = {}) {
+  const bars = readStructure(tracks, { warn });
+  const s = bundle.song;
+  const lines = [
+    `\\title ${q(s.title)}`,
+    `\\artist ${q(s.artist)}`,
+    `\\tab ${q(`Songsterr tab, revision ${s.revisionId} (converted by psarc2gp)`)}`,
+    ".",
+  ];
+  const reports = [];
+  const names = new Map();
+  tracks.forEach((t, ti) => {
+    const kind = trackKind(t.meta);
+    const tuning = t.data.tuning ?? t.meta.tuning;
+    if (!Array.isArray(tuning) || !tuning.length) throw new Error(`${t.meta.name}: no tuning (drums and vocals aren't converted yet)`);
+    const nStrings = tuning.length;
+    const sound = soundFor(t.meta);
+    const base = t.meta.name || t.data.name || `Track ${t.index + 1}`;
+    names.set(base, (names.get(base) ?? 0) + 1);
+    const name = names.get(base) > 1 ? `${base} ${names.get(base)}` : base;
+    const stats = { notes: 0, graceNotes: 0, skippedNotes: 0, unsupported: new Set(), badBars: [] };
+    lines.push(`\\track ${q(name)}`);
+    lines.push("\\staff {score tabs}");
+    lines.push(`\\tuning (${tuning.map(pitchName).join(" ")})`);
+    lines.push(`\\instrument ${Math.max(0, Math.min(127, t.meta.instrumentId ?? 27))}`);
+    if (kind === "guitar" || kind === "bass") lines.push("\\displaytranspose 12");
+    const capo = t.data.capo ?? t.meta.capo;
+    if (capo > 0) lines.push(`\\capo ${capo}`);
+
+    const nVoices = Math.max(...t.data.measures.map((m) => m.voices?.length ?? 0));
+    for (let vi = 0; vi < Math.max(1, nVoices); vi++) {
+      if (vi > 0) lines.push("\\voice");
+      const state = { dynamics: null };
+      let lastKey = null;
+      const body = t.data.measures.map((m, mi) => {
+        const bar = bars[mi];
+        const meta = [];
+        if (vi === 0) {
+          const clef = CLEFS[m.clef];
+          if (m.clef !== undefined && !clef) stats.unsupported.add(`clef ${m.clef}`);
+          if (clef) meta.push(`\\clef ${clef}`);
+          else if (mi === 0 && kind === "bass") meta.push("\\clef bass");
+          if (ti === 0) {
+            if (mi === 0 && bars.anacrusis) meta.push("\\ac");
+            if (bar.tsChange) meta.push(`\\ts (${bar.num} ${bar.den})`);
+            if (bar.tripletFeel) meta.push(`\\tf ${bar.tripletFeel}`);
+            if (bar.repeatStart) meta.push("\\ro");
+            if (bar.endings) meta.push(bar.endings.length > 1 ? `\\ae (${bar.endings.join(" ")})` : `\\ae ${bar.endings[0]}`);
+            if (bar.repeatCount) meta.push(`\\rc ${bar.repeatCount}`);
+            for (const tp of bar.tempo ?? []) meta.push(tp.ratio ? `\\tempo (${tp.bpm} "" ${tp.ratio})` : `\\tempo ${tp.bpm}`);
+            if (bar.section) meta.push(`\\section ${q(bar.section)}`);
+          }
+          if (bar.key !== undefined && bar.key !== lastKey && bar.key >= -7 && bar.key <= 7) {
+            meta.push(`\\ks ${KEYS[bar.key + 7]}`);
+            lastKey = bar.key;
+          }
+        }
+        const voice = m.voices?.[vi];
+        let beats = [];
+        let len = [0, 1];
+        for (const [bi, b] of (voice?.beats ?? []).entries()) {
+          const tex = beatTex(b, nStrings, stats, `${name}, bar ${mi + 1}, beat ${bi + 1}`, state);
+          if (tex) beats.push(tex);
+          if (!b.graceNote && Array.isArray(b.duration)) len = addFrac(len, b.duration);
+        }
+        const want = [bar.num, bar.den];
+        const full = len[0] * want[1] === want[0] * len[1];
+        // a bar rest (voice.rest) can be stored as one whole rest whatever the time signature
+        const barRest = voice?.rest === true && (voice.beats ?? []).every((b) => b.rest || b.notes?.every((n) => n.rest));
+        if (!beats.length || (!full && !(mi === 0 && bars.anacrusis))) {
+          // a voice that's empty or doesn't fill its bar: if it's a second voice, fill with a rest;
+          // otherwise keep what's there and let alphaTab pad/report it
+          if (!beats.length || barRest) beats = [restFor(want)];
+          else stats.badBars.push(mi + 1);
+        }
+        return `${meta.length ? `${meta.join(" ")} ` : ""}${beats.join(" ")}`;
+      });
+      lines.push(body.join(" |\n"));
+    }
+    if (stats.badBars.length) warn(`${name}: ${stats.badBars.length} bar(s) don't add up to their time signature (bar ${stats.badBars.slice(0, 5).join(", ")})`);
+    if (stats.skippedNotes) warn(`${name}: ${stats.skippedNotes} note(s) on strings the tuning doesn't have were left out`);
+    if (stats.unsupported.size) warn(`${name}: not converted: ${[...stats.unsupported].join(", ")}`);
+    reports.push({
+      name, kind, index: t.index, notes: stats.notes, graceNotes: stats.graceNotes, sound,
+      tuning: [...tuning].reverse().map(pitchName).join(" "), // lowest first, as psarc reports it
+    });
+  });
+  return { tex: lines.join("\n") + "\n", bars, tracks: reports };
+}
+
+// a rest filling a bar of num/den (whole-bar rests in common meters, otherwise a run of den-notes)
+function restFor([num, den]) {
+  if (num === den) return "r.1";
+  if (num * 2 === den) return "r.2";
+  return Array.from({ length: num }, () => `r.${den}`).join(" ");
+}
