@@ -11,7 +11,7 @@ import { ask } from "./prompt.js";
 const HELP = `usage: psarc2gp [options] <file.psarc | folder | songsterr-bundle.json> [...]
 
 Writes "Artist - Title.gp" next to each .psarc (or into --out). Folders convert every .psarc inside.
-A Songsterr bundle (.json, saved by the web app's bookmarklet) becomes "Artist - Title (Songsterr).gp",
+A Songsterr bundle (.json, saved by the web app's bookmarklet) becomes "Artist - Title.gp" too,
 synced to the chosen video's points.
 
 options:

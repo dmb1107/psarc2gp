@@ -378,12 +378,12 @@ test("convert: no video fits → the tab still converts without a recording (no 
   await assert.rejects(convertSongsterr(b, { audio: async () => audio }), /no video fits/);
 });
 
-test("convert: repeats synced per pass, negative first point becomes FramePadding, name has the suffix", async () => {
+test("convert: repeats synced per pass, negative first point becomes FramePadding, named like a .psarc", async () => {
   const t = track([restBar({ repeatStart: true }), restBar({ repeat: 2 }), restBar()]);
   const b = bundle([t], [video(evenPoints(5, 2, -1.5), { videoId: "early" })]);
   const audio = { bytes: syntheticMp3(10), format: "mp3", seconds: 8.5, provider: "file" }; // ends with the last bar
   const r = await convertSongsterr(b, { audio });
-  assert.equal(r.name, "Artist - Title (Songsterr).gp");
+  assert.equal(r.name, "Artist - Title.gp");
   assert.equal(r.report.playedBars, 5);
   assert.equal(r.report.syncPoints, 6);
   const back = alphaTab.importer.ScoreLoader.loadScoreFromBytes(r.gp, new alphaTab.Settings());
@@ -586,9 +586,9 @@ test("bundle validation", () => {
   bad((b) => { b.trackData = []; }, /doesn't match the track list/);
 });
 
-test("output name: suffix keeps it apart from the .psarc version; unsafe characters removed", () => {
-  assert.equal(songsterrOutputName({ artist: 'AC/DC', title: 'T.N.T. "live"?' }), "ACDC - T.N.T. live (Songsterr).gp");
-  assert.equal(songsterrOutputName({}), "Unknown - Untitled (Songsterr).gp");
+test("output name: Artist - Title.gp, as for a .psarc; unsafe characters removed", () => {
+  assert.equal(songsterrOutputName({ artist: 'AC/DC', title: 'T.N.T. "live"?' }), "ACDC - T.N.T. live.gp");
+  assert.equal(songsterrOutputName({}), "Unknown - Untitled.gp");
 });
 
 test("the .gp names its Songsterr page and video in Guitar Pro's Notices", async () => {
@@ -690,7 +690,7 @@ test("CLI: a bundle needs --audio or --no-audio, then converts; --list-videos li
     assert.match(r.stdout, /fits\s+default\s+abc\s+2 points/);
     r = run("--no-audio", f);
     assert.equal(r.status, 0, r.stderr);
-    assert.ok(fs.existsSync(path.join(dir, "Artist - Title (Songsterr).gp")));
+    assert.ok(fs.existsSync(path.join(dir, "Artist - Title.gp")));
     r = run("--no-audio", f);
     assert.match(r.stdout, /SKIP/);
     const mp3 = path.join(dir, "a.mp3");

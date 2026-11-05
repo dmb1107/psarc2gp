@@ -145,8 +145,9 @@ Songsterr:
   song fields only.
 - Changing the secrets password revokes nothing (old versions of the file stay in git history with the
   old password): revoke by rotating the key at the provider.
-- Output is `Artist - Title (Songsterr).gp`: library keys are file names, so the plain name would collide
-  with the psarc version of the same song.
+- Output is `Artist - Title.gp`, the same name as the psarc version of the song (the user's choice; it was
+  `… (Songsterr).gp`). Library keys are file names, so the two versions meet as "Already in your library"
+  and Replace overwrites the other one; the CLI skips an existing file.
 - A drum note's `fret` is a Guitar Pro percussion articulation id (mostly the GM drum number; 91–98 are
   GP's extras, e.g. 92 half-open hi-hat), `string` only its staff place. alphaTex names articulations
   (`\articulation (p42 42)`, then `p42.8`); names like `a36` or `d38` parse as pitches. alphaTab gives a

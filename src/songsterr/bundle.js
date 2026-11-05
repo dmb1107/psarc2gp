@@ -93,10 +93,11 @@ export function trackKind(meta) {
 
 const clean = (s) => String(s ?? "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim();
 
-// "Artist - Title (Songsterr).gp": the suffix keeps it apart from a .psarc version of the same song
-// (the web library keys songs by file name, and the CLI skips existing files)
+// "Artist - Title.gp", the same name a .psarc of the song gets (the user's choice, 2026-11-05; it was
+// "… (Songsterr).gp"): the web library keys songs by file name, so the two versions of a song meet as
+// "Already in your library" / Replace, and the CLI skips an existing file
 export function songsterrOutputName(song) {
-  return `${clean(song.artist) || "Unknown"} - ${clean(song.title) || "Untitled"} (Songsterr).gp`;
+  return `${clean(song.artist) || "Unknown"} - ${clean(song.title) || "Untitled"}.gp`;
 }
 
 // The Songsterr page the song came from: the one the bookmarklet read (bundle.page, without its query

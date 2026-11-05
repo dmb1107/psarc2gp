@@ -205,9 +205,11 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
     last. Another API, or a small server of ours with an interface already fixed, is one provider file.
     MP3 and M4A are embedded as delivered (Guitar Pro 8 plays both; Opus doesn't play and is refused).
     Guitar Pro's own YouTube audio source was tried and is dead in 8.1.5 (it calls an API YouTube retired).
-19. **Songsterr output is named `Artist - Title (Songsterr).gp`.** The library's key is the file name, so
-    the plain name would collide with the `.psarc` version of the same song. Another video or revision of
-    the same song is the same name (skip / Replace as usual, with the video and revision shown).
+19. **Songsterr output is named `Artist - Title.gp`**, like a `.psarc` (the user's choice, 2026-11-05; until
+    then `Artist - Title (Songsterr).gp`). The library's key is the file name, so the Songsterr and `.psarc`
+    versions of a song now meet as one name: "Already in your library", and Replace overwrites the other;
+    the CLI skips an existing file. Another video or revision of the same song is the same name too (skip /
+    Replace as usual, with the video and revision shown).
     Guitar Pro's Notices name the Songsterr page and the YouTube video.
 20. **Sync points are rewritten into Guitar Pro 8's own layout** for files with repeats. GP8 numbers a
     sync point's bar by played bar and stores points in play order; alphaTab writes the written bar, which

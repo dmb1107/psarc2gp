@@ -237,10 +237,11 @@ open the file.
 - **convert.js**: `convertSongsterr({ bundle, tracks, video, audio }) → { gp, report }` with the same
   RSE/mute options as `convertPsarc`. Sounds from Songsterr's `instrumentId` (bass → finger bass,
   distortion/overdrive → drive guitar, clean/acoustic → clean). Output name
-  **`Artist - Title (Songsterr).gp`**, same safety rules (never overwrite by default). The suffix matters:
-  the web library's key is the lowercased file name (`songId(name)` in `web/library.js`), so a plain
-  `Artist - Title.gp` would collide with the `.psarc` version of the same song (the queue says "exists" and
-  "Replace" overwrites the psarc file), and the CLI would skip it in a shared output folder. Another video
+  **`Artist - Title.gp`**, same safety rules (never overwrite by default). Until 2026-11-05 it was
+  `… (Songsterr).gp`; the user chose the plain name, knowing that the web library's key is the lowercased
+  file name (`songId(name)` in `web/library.js`), so it meets the `.psarc` version of the same song (the
+  queue says "exists" and "Replace" overwrites the other file), and the CLI skips it in a shared output
+  folder. Another video
   or revision of the same Songsterr song is still the same name: "exists"/"Replace" as today, with the
   video and revision shown so the user knows what they're replacing.
 
@@ -432,7 +433,7 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
 - **New easy-to-get-wrong facts:** Songsterr string 0 = highest (alphaTex string = Songsterr + 1); points
   are per played bar with no end point; listed videos often don't fit the revision; the page state holds
   the visitor's account, so copy song fields only; changing the secrets password revokes nothing (rotate
-  the key); Songsterr output is named `… (Songsterr).gp` because library keys are file names.
+  the key); Songsterr output is named like a psarc's, so the two versions of a song share a library key.
 
 ## Don't break psarc
 

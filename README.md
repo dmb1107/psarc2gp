@@ -95,7 +95,8 @@ Then open a song on songsterr.com, wait for its tab to load and click the bookma
 with the song: pick the tracks (all of them are preselected), the video (only videos whose timings
 fit this version of the tab are offered, Songsterr's own first) and the recording (*fetch the video's
 audio for me*, *my own audio file* or *none*). It converts like a `.psarc` and lands in the same library,
-as `Artist - Title (Songsterr).gp`. Guitar Pro's *Score information* names the Songsterr page and the
+as `Artist - Title.gp`, the same name as a `.psarc` of the song (so the app offers to replace one with
+the other). Guitar Pro's *Score information* names the Songsterr page and the
 YouTube video.
 
 - The bookmark reads only what the Songsterr page has already loaded (the song's details and the videos'
@@ -202,7 +203,7 @@ Songsterr songs (.json saved by the bookmark's "Save the song as a file"):
       --audio-provider <id> fetch the audio only from this provider
 ```
 
-A Songsterr song becomes `Artist - Title (Songsterr).gp`. Folders are only searched for `.psarc` files, so
+A Songsterr song becomes `Artist - Title.gp`, like a `.psarc`, and an existing file is skipped. Folders are only searched for `.psarc` files, so
 saved songs are converted only when named.
 
 ## How it works
