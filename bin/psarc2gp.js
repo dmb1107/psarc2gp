@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { convertPsarc, loadSong, outputName } from "../src/convert.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName, validateBundle } from "../src/songsterr/convert.js";
-import { audioInfo } from "../src/songsterr/audio/duration.js";
+import { getAudio, needsSecrets, provider, config as audioConfig, AudioError, describeAudioError } from "../src/songsterr/audio/index.js";
+import { decryptSecrets } from "../src/songsterr/secrets.js";
+import { ask } from "./prompt.js";
 
 const HELP = `usage: psarc2gp [options] <file.psarc | folder | songsterr-bundle.json> [...]
 
@@ -25,14 +27,19 @@ options:
   -h, --help
 
 Songsterr bundles:
-      --audio <file>        the video's audio as MP3 or M4A (one bundle at a time)
+      --audio <file>        the video's audio as MP3 or M4A (one bundle at a time); without it the audio
+                            is fetched for you, which needs the password for the shared key
+                            (asked for, or set PSARC2GP_PASSWORD)
+      --audio-provider <id> fetch the audio only from this provider (default: the configured order)
+      --nudge <ms>          move the recording against the notes for this song: positive when the
+                            recording sounds late (e.g. --nudge 40), negative when early
       --video <which>       default | backing | solo | playthrough | alternative | <YouTube video id>
       --list-videos         list the bundle's videos and whether they fit the tab, then stop
       --tracks <i,j,...>    track numbers to convert (default: every guitar and bass track; see --list-videos)`;
 
 function parseArgs(argv) {
   const opts = { force: false, out: null, recursive: false, audio: true, mute: true, rse: true, atex: false, pause: false, quiet: false, inputs: [],
-    audioFile: null, video: "default", listVideos: false, tracks: null };
+    audioFile: null, audioProvider: null, nudge: 0, video: "default", listVideos: false, tracks: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-f" || a === "--force") opts.force = true;
@@ -45,6 +52,8 @@ function parseArgs(argv) {
     else if (a === "--pause") opts.pause = true;
     else if (a === "-q" || a === "--quiet") opts.quiet = true;
     else if (a === "--audio") opts.audioFile = argv[++i];
+    else if (a === "--audio-provider") opts.audioProvider = argv[++i];
+    else if (a === "--nudge") opts.nudge = Number(argv[++i]);
     else if (a === "--video") opts.video = argv[++i];
     else if (a === "--list-videos") opts.listVideos = true;
     else if (a === "--tracks") opts.tracks = String(argv[++i] ?? "").split(",").filter(Boolean).map(Number);
@@ -108,6 +117,61 @@ if (opts.tracks?.some((t) => !Number.isInteger(t) || t < 0)) {
   process.exit(2);
 }
 
+if (!Number.isFinite(opts.nudge) || Math.abs(opts.nudge) > 5000) {
+  console.error("ERR  --nudge takes milliseconds, e.g. --nudge 40 or --nudge -25");
+  process.exit(2);
+}
+if (opts.audioProvider) {
+  try { provider(opts.audioProvider); } catch (e) { console.error(`ERR  ${e.message}`); process.exit(2); }
+}
+
+// The shared audio key, decrypted once per run (asked for only when audio is actually fetched).
+const SECRETS_FILE = process.env.PSARC2GP_SECRETS || path.join(import.meta.dirname, "..", "web", "songsterr-secrets.json");
+const ORELSE = "or give the audio with --audio <file.mp3|file.m4a>, or --no-audio";
+let secretsPromise = null;
+async function readSecrets() {
+  if (!fs.existsSync(SECRETS_FILE)) throw new Error(`fetching the audio needs the shared key, and ${SECRETS_FILE} doesn't exist yet (tools/encrypt-secrets.js writes it); ${ORELSE}`);
+  const enc = JSON.parse(fs.readFileSync(SECRETS_FILE, "utf8"));
+  let password = process.env.PSARC2GP_PASSWORD;
+  if (!password) {
+    if (!process.stdin.isTTY) throw new Error(`fetching the audio needs the password: set PSARC2GP_PASSWORD, ${ORELSE}`);
+    password = await ask("Password for the shared audio key: ", { hidden: true });
+  }
+  try { return await decryptSecrets(enc, password); } catch (e) {
+    throw new Error(e.code === "password" ? `wrong password for the shared audio key; ${ORELSE}` : e.message);
+  }
+}
+const loadSecrets = () => (secretsPromise ??= readSecrets());
+
+async function fetchAudio(videoId, lastPoint, file) {
+  const providers = opts.audioProvider ? [opts.audioProvider] : audioConfig.providers;
+  const secrets = !file && needsSecrets(providers) ? await loadSecrets() : {};
+  const tty = process.stdout.isTTY && !opts.quiet;
+  let stage = null;
+  const onProgress = (e) => {
+    if (e.stage !== stage) {
+      if (stage === "downloading" && tty) process.stdout.write("\n");
+      stage = e.stage;
+      if (e.stage === "converting") log(`    fetching the audio of video ${videoId} (${provider(e.provider).label})`);
+    }
+    if (e.stage === "downloading" && tty) {
+      const mb = (n) => (n / 1048576).toFixed(1);
+      process.stdout.write(`\r    downloading ${mb(e.received)}${e.total ? ` / ${mb(e.total)}` : ""} MB`);
+    }
+  };
+  try {
+    return await getAudio(videoId, { providers, secrets, file, minSeconds: lastPoint, onProgress });
+  } catch (e) {
+    if (!(e instanceof AudioError)) throw e;
+    const label = provider(e.provider).label;
+    if (e.noFile) throw new Error("no audio file given: give the audio with --audio <file.mp3|file.m4a>, or --no-audio");
+    if (e.missingSecret) throw new Error(`${path.basename(SECRETS_FILE)} has no key for ${label} (add one with tools/encrypt-secrets.js); ${ORELSE}`);
+    throw new Error(`${describeAudioError(e)} (${label}: ${e.message})${file ? "" : `; ${ORELSE}`}`);
+  } finally {
+    if (stage === "downloading" && tty) process.stdout.write("\n");
+  }
+}
+
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 async function convertBundle(file) {
@@ -137,11 +201,13 @@ async function convertBundle(file) {
     return "skipped";
   }
   let audio = null;
+  let got = null;
   if (opts.audio) {
-    if (!opts.audioFile) throw new Error("give the video's audio with --audio <file.mp3|file.m4a>, or --no-audio (fetching it for you comes later)");
-    const bytes = new Uint8Array(fs.readFileSync(opts.audioFile));
-    const info = audioInfo(bytes);
-    audio = { bytes, format: info.format, seconds: info.seconds, provider: "file" };
+    const file = opts.audioFile ? { bytes: new Uint8Array(fs.readFileSync(opts.audioFile)), name: path.basename(opts.audioFile) } : null;
+    audio = async ({ videoId, lastPoint }) => {
+      got = await fetchAudio(videoId, lastPoint, file);
+      return { ...got, offsetMs: got.offsetMs + opts.nudge };
+    };
   }
   const result = await convertSongsterr(bundle, { tracks: opts.tracks, video: opts.video, audio, mute: opts.mute, rse: opts.rse });
   fs.mkdirSync(outDir, { recursive: true });
@@ -150,7 +216,9 @@ async function convertBundle(file) {
   const r = result.report;
   log(`OK   ${path.basename(outPath)}  (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   log(`    ${r.bars} bars (${r.playedBars} played), ${r.syncPoints} sync points from video ${r.video.videoId} (${r.video.feature})` +
-    `${r.audioSeconds ? `, ${fmtTime(r.audioSeconds)} of audio` : ""}`);
+    `${r.audioSeconds ? `, ${fmtTime(r.audioSeconds)} of audio${r.audioProvider === "file" ? "" : ` from ${provider(r.audioProvider).label}`}` : ""}`);
+  if (got && (got.offsetMs || opts.nudge)) log(`    sync shifted ${got.offsetMs + opts.nudge} ms (${[got.offsetMs && `${got.offsetMs} for ${provider(got.provider).label}`, opts.nudge && `${opts.nudge} nudge`].filter(Boolean).join(" + ")})`);
+  if (got?.meta?.quotaRemaining != null) log(`    shared audio allowance left: ${got.meta.quotaRemaining} requests`);
   for (const t of r.tracks) log(`    ${t.name}: ${t.notes} notes, tuning ${t.tuning}, ${t.soundName}${r.muted ? " (muted)" : ""}${t.graceNotes ? `; ${t.graceNotes} grace notes` : ""}`);
   for (const w of r.warnings) log(`    warning: ${w}`);
   return "converted";

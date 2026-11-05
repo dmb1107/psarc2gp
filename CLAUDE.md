@@ -19,6 +19,8 @@ node bin/psarc2gp.js [-f] [-o dir] <file.psarc | folder> ...
 node tools/verify.js .samples/*.psarc      # bars complete, notes present, onset error vs chart
 node tools/sweep.js <folder> ...           # verify.js on a whole library, converted in memory
 node tools/snapshot.js a.json <folder> ... # fingerprint the output; --compare a.json b.json after a change
+node bin/psarc2gp.js song.json [--audio a.mp3]   # Songsterr bundle; no --audio fetches it (shared key's password)
+node tools/encrypt-secrets.js              # write web/songsterr-secrets.json (audio keys, one password)
 node tools/compare-tonelib.js X.psarc X.song
 node tools/roundtrip.js out/*.gp           # re-open .gp files and report what Guitar Pro will see
 node tools/render-check.cjs out/*.gp [--png dir]   # render every track in headless Chromium (needs Playwright)
@@ -92,6 +94,10 @@ test/               node:test; samples.test.js uses real charts from .samples/
   confirmed by ear). So `src/gp/rse.js` rewrites each track's sound in `score.gpif` after export, using sound
   definitions copied from Guitar Pro 8 files. It throws if alphaTab's XML changes shape; re-check it when
   upgrading alphaTab. Instrument tracks are written muted (`playbackInfo.isMute`); the audio track is not.
+- Guitar Pro numbers a sync point's `<Bar>` by **played** bar (repeats expanded) and stores the points in
+  play order; `<Value><BarIndex>` is the written bar. alphaTab writes the written bar in both, which GP8
+  misreads when a repeat starts at bar 1 (the whole recording lands in the first bars). Songsterr output is
+  rewritten by `src/gp/syncpoints.js`; re-check it when upgrading alphaTab. psarc output has no repeats.
 - Bar-length checks must sum `beat.displayDuration` (grace notes count 0); `playbackDuration` lends
   time to grace notes from neighbouring beats.
 - ToneLib re-bars count-ins, so its bar numbers are offset from ours by a constant; the comparison

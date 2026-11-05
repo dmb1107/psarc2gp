@@ -1,6 +1,8 @@
 # Songsterr songs → synced Guitar Pro files: plan
 
-Status: **step 1 built** (2026-11-04): `src/songsterr/` converts a saved bundle with the CLI
+Status: **step 2 built and tried with the real key** (2026-11-05): the swappable audio providers, the
+encrypted key file and its tool, and the CLI fetching the audio itself; UNDERWATER BOI fetched through
+RapidAPI "sounds good" in GP8, and the provider's offset is measured (13 ms, see step 2). **Step 1 built** (2026-11-04): `src/songsterr/` converts a saved bundle with the CLI
 (`--audio file` or `--no-audio`), tested on five real songs; **the user heard UNDERWATER BOI in GP8 and it "sounds great"** (2026-11-05). Alternate
 endings and triplet feel are handled (seen 2026-11-05); D.S./D.C./coda/fine are deferred until a real tab
 with one turns up (see "Order of work"). Before building, every part was tried end to end in throwaway experiments (lab pages in `.samples/songsterr-lab/`, git-ignored): Songsterr data by bookmarklet,
@@ -216,8 +218,8 @@ Tried in the lab (`.samples/songsterr-lab/audio.html`, 2026-11-04, user's key, U
 MP3 is embedded as delivered (GP8 plays MP3; the click test landed on the beat). Same video ID → same
 timeline as Songsterr's points; nothing is cut. **But don't assume a zero offset:** re-encoding to MP3
 usually adds an encoder delay (typically ~25–50 ms of silence at the start), and whether Guitar Pro skips it
-depends on the file's gapless header. Measure it once in step 2 (a song with a clear attack on bar 1, or
-the click test against Songsterr's points) and put the result in that provider's `offsets` entry.
+depends on the file's gapless header. Measured in step 2: this provider's MP3s carry 13 ms of encoder delay
+that no player skips, now corrected by its `offsets` entry.
 
 #### Swappable audio sources (the user's requirement)
 
@@ -229,6 +231,7 @@ config; nothing else in the converter, the web app or the CLI changes.
 src/songsterr/audio/
   index.js            getAudio(videoId, options): runs the configured providers in order, validates the result
   config.js           which providers, in what order, and their offsets (plain data, no secrets)
+  errors.js           AudioError, its codes, which codes stop the fallback, the wording users see
   validate.js         format and length checks, shared by every provider
   duration.js         MP3 and M4A duration from the bytes (no decoder needed)
   providers/
@@ -439,12 +442,55 @@ Output goes next to the bundle or into `--out`, named as in §2. Options:
    video's audio as an MP3 (48 kHz, Lavc, 3:05) given with `--audio`; the user played it in GP8:
    "sounds great", repeats included. A rough onset measurement (spectral flux against the points' beat
    grid) had put the attacks about 40 ms before the beats over most of the song, with a weak peak: either
-   it's inaudible or the measurement was off, so no offset correction for now.
-2. `src/songsterr/audio/` (contract, config, shared checks, duration.js (**built**: MP3 Info/Xing/VBRI/
-   LAME and frame counting, M4A mdhd/mvhd/mehd/sidx; checked against macOS `afinfo` on the format-test
-   files), the RapidAPI and file providers,
-   contract tests) and `tools/encrypt-secrets.js` (on the dedicated RapidAPI account's key); used by the
-   CLI. Measure the provider's MP3 offset and record it in config.js.
+   it's inaudible or the measurement was off, so no offset correction for now. (Step 2's measurement
+   confirmed it: that file's attacks are 42 ms early with its encoder delay trimmed, 19 ms without.)
+2. **Built** (2026-11-05), except what needs the real key: `src/songsterr/audio/` (index, config, errors,
+   validate, duration.js: MP3 Info/Xing/VBRI/LAME and frame counting, M4A mdhd/mvhd/mehd/sidx, checked
+   against macOS `afinfo` on the format-test files; providers `rapidapi-youtube-mp310` and `file`);
+   `src/songsterr/secrets.js` (PBKDF2-SHA-256, 600,000 iterations → AES-256-GCM, WebCrypto in Node and
+   browsers); `tools/encrypt-secrets.js` (hidden prompts; `bin/prompt.js`); the CLI fetches the audio of the
+   chosen video when no `--audio` is given (password from a prompt or `PSARC2GP_PASSWORD`; `--audio-provider`;
+   `PSARC2GP_SECRETS` points at another key file, used by the tests). `convertSongsterr`'s `audio` may be a
+   function called with the chosen video, so the right video's audio is fetched only after the tab converted.
+   test/songsterr-audio.test.js: a contract every fetching provider must pass (success, auth, quota,
+   not-found, unavailable, wrong format, too short, no key, cancel; a new provider fails the test until its
+   fake answers are added), the fallback rules, the secrets file and tool, the CLI's no-network paths.
+   psarc snapshot identical to the baseline (15/15).
+   **With the real key** (2026-11-05): the user made the dedicated RapidAPI account and wrote
+   `web/songsterr-secrets.json` with the tool; the CLI fetched UNDERWATER BOI's default video (Pb7-ICi-r8Y)
+   without `--audio`: a 3.7 MB, 44.1 kHz MP3 (3:05, ffmpeg "Lavf62", **no Info/LAME header**). The user
+   played it in GP8: "sounds good". The error answers (401/403/429, "video unavailable") are still
+   untried; they follow RapidAPI's gateway conventions.
+   **Offset, measured** on that file: it is the same recording as the step 1 MP3 (cross-correlation 0.99
+   in four 20 s windows across the song, constant lag, no drift), 38 ms later than it. Note attacks
+   (spectral flux, full band and >2 kHz alike) against the beat grid from Songsterr's points (392 beats):
+   **+20 ms** decoded with mpg123/ffmpeg, which keep the MP3 decoder's 529-sample delay; macOS's decoder
+   (afconvert) drops those 529 samples, so **+8 ms** there. Without a header, the encoder's 576-sample
+   delay (13 ms at 44.1 kHz) is never skipped by any player, so `offsets["rapidapi-youtube-mp310"]` is
+   **13 ms**: residual error −5 to +7 ms, whichever decoder Guitar Pro uses (unknown on Windows). One song
+   only, peak contrast about 3 standard deviations; re-measure if another song sounds off. The scripts
+   (mpg123 decode, scipy cross-correlation and spectral flux) were throwaway; to repeat it, decode with
+   `mpg123 --no-gapless`, build the beat grid from the points (each played bar's span split by its
+   numerator) and find the lag that maximizes the mean onset strength at the beats.
+   **Three more songs** (2026-11-05, same provider, same method, lag of the attacks after Songsterr's
+   points before any correction): UNDERWATER BOI +20 ms, Enter Sandman +40 (both halves of the song agree),
+   Lágrima +64 to +81 (halves disagree: rubato), Autumn Leaves +110 to +160 (weak peak; swing, a lesson
+   video). So **most of the lag is the video's points, not the provider**: it varies per video by more than
+   the provider's 13 ms. The user's ear: Enter Sandman "seems fine", Autumn Leaves "can't quite tell",
+   Lágrima "synced up but the audio ends early": GP8 squeezed the whole recording into bars 1–4 (its clock
+   said 5:13 for a 1:52 song, the final chord sat under bar 5). **Cause: a repeat starting at bar 1.** In
+   GP8's own files a sync point's `<Bar>` is the *played* bar number (repeats expanded; "Salad Days" in the
+   user's GuitarPro folder counts to 59 in a 36-bar song), `<Value><BarIndex>` the written bar, and the
+   points are stored in play order. alphaTab 1.8.4 writes the written bar in both and groups by bar; GP8
+   copes unless both passes of the first bar claim played bar 0. Test scores over Lágrima's audio, checked
+   in GP8: a repeat of bars 3–6 was right (0:30), a repeat of bars 1–4 wrong (1:20, 14.4 bpm), and right
+   (0:30, 72 bpm) once `src/gp/syncpoints.js` rewrote the points in GP8's layout. With it, Lágrima reads
+   1:52 with the waveform across all 24 bars, and UNDERWATER BOI is unchanged (3:03). alphaTab reads the
+   bar from `<BarIndex>`, so the web player is unaffected. Ruled out on the way: the recording, the MP3,
+   the negative `FramePadding` (GP8 writes a late start the same way).
+   Added `--nudge <ms>` (per song, positive = the recording is late) so a song can be corrected by ear.
+   Automatic per-song alignment (onsets against the points) would need decoded audio (browsers have
+   decodeAudioData; Node has no decoder) and a steadier measurement than this one: research, later.
 3. The real bookmarklet + the web app's Songsterr page: settings panel and unlocking (prompt, invite link
    before routing, bookmarklet), bundle handling, video choice, conversion in the worker, library.
 4. `tools/verify-songsterr.js`; bookmarklet in Chrome and Safari.

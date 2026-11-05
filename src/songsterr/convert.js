@@ -6,6 +6,7 @@ import { buildAlphaTex } from "./score.js";
 import { playedBars, chooseVideo, describeVideos, syncFromPoints } from "./sync.js";
 import { SOUNDS, useRseSounds } from "../gp/rse.js";
 import { rewriteZipEntry } from "../gp/zip.js";
+import { syncPointsInPlayOrder } from "../gp/syncpoints.js";
 import { utf8 } from "../lib/bytes.js";
 
 export { validateBundle };
@@ -47,7 +48,9 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
 // Options:
 //   tracks     track indices (default: every guitar and bass track)
 //   video      "default" | "backing" | "solo" | "playthrough" | "alternative" | a YouTube video id
-//   audio      { bytes, format: "mp3" | "m4a", provider, offsetMs } or null (no audio track)
+//   audio      { bytes, format: "mp3" | "m4a", seconds, provider, offsetMs } or null (no audio track), or an
+//              async function ({ videoId, feature, lastPoint }) → that, called once the video is chosen
+//              (so the audio of the right video is fetched, and only after the tab converted)
 //   rse, mute  as convertPsarc
 //   fetch      for tracks the bundle doesn't carry (CDN)
 export async function convertSongsterr(bundle, { tracks = null, video = "default", audio = null, rse = true, mute = true, fetch, onWarning = () => {} } = {}) {
@@ -61,6 +64,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   const written = score.masterBars.length;
   const chosen = chooseVideo(bundle.videos, video, played.length, written);
   if (chosen.points.length !== played.length) warn(`video ${chosen.videoId} has one point per written bar, not per played bar: repeats are timed from the first pass`);
+  if (typeof audio === "function") audio = await audio({ videoId: chosen.videoId, feature: chosen.feature ?? "default", lastPoint: chosen.points.at(-1) });
 
   const barQuarters = (i) => score.masterBars[i].calculateDuration() / QUARTER_TICKS;
   const sync = syncFromPoints(chosen.points, played, barQuarters, { writtenCount: written, offsetMs: audio?.offsetMs ?? 0 });
@@ -79,10 +83,11 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     score.backingTrack.rawAudioFile = audio.bytes;
   }
   let gp = new alphaTab.exporter.Gp7Exporter().export(score, settings);
-  if (rse) {
-    const keys = built.tracks.map((t) => t.sound);
-    gp = await rewriteZipEntry(gp, "Content/score.gpif", (xml) => useRseSounds(utf8(xml), keys));
-  }
+  const keys = built.tracks.map((t) => t.sound);
+  gp = await rewriteZipEntry(gp, "Content/score.gpif", (xml) => {
+    const gpif = syncPointsInPlayOrder(utf8(xml), played);
+    return rse ? useRseSounds(gpif, keys) : gpif;
+  });
 
   const s = bundle.song;
   return {

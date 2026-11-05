@@ -222,6 +222,22 @@ test("convert: repeats synced per pass, negative first point becomes FramePaddin
   const gpif = new TextDecoder().decode(await unzipEntry(r.gp, "Content/score.gpif"));
   assert.match(gpif, /<FramePadding>66150<\/FramePadding>/); // 1.5 s at 44.1 kHz
   assert.ok(back.tracks.every((x) => x.playbackInfo.isMute));
+  // Guitar Pro's layout: <Bar> counts played bars, <BarIndex> is the written bar, stored in play order.
+  // With alphaTab's own layout (written bar in both), GP8 squeezed the audio into the first bars when a
+  // repeat started at bar 1, as here.
+  const sync = [...gpif.matchAll(/<Automation><Type>SyncPoint<\/Type>[\s\S]*?<\/Automation>/g)].map(([a]) =>
+    ["Bar", "BarIndex", "BarOccurrence", "Position"].map((k) => Number(a.match(new RegExp(`<${k}>([^<]*)</${k}>`))[1])));
+  assert.deepEqual(sync, [[0, 0, 0, 0], [1, 1, 0, 0], [2, 0, 1, 0], [3, 1, 1, 0], [4, 2, 0, 0], [4, 2, 0, 1]]);
+  const ms = back.exportFlatSyncPoints().sort((x, y) => x.millisecondOffset - y.millisecondOffset).map((p) => Math.round(p.millisecondOffset));
+  assert.deepEqual(ms.slice(0, 5), [-1500, 500, 2500, 4500, 6500]);
+});
+
+test("sync points in play order: refuses XML it doesn't recognize", async () => {
+  const { syncPointsInPlayOrder } = await import("../src/gp/syncpoints.js");
+  assert.throws(() => syncPointsInPlayOrder("<GPIF></GPIF>", []), /no <MasterTrack>/);
+  const one = '<MasterTrack><Automations><Automation><Type>SyncPoint</Type><Bar>0</Bar><Position>0</Position><Value><BarIndex>3</BarIndex><BarOccurrence>0</BarOccurrence></Value></Automation></Automations></MasterTrack>';
+  assert.throws(() => syncPointsInPlayOrder(one, [{ bar: 0, occurrence: 0 }]), /bar 4 pass 1, which isn't played/);
+  assert.match(syncPointsInPlayOrder(one, [{ bar: 0, occurrence: 0 }, { bar: 3, occurrence: 0 }]), /<Bar>1<\/Bar>/);
 });
 
 test("convert: tracks fetched from the CDN when the bundle doesn't carry them", async () => {
@@ -334,7 +350,9 @@ test("CLI: a bundle needs --audio or --no-audio, then converts; --list-videos li
     const f = path.join(dir, "song.json");
     fs.writeFileSync(f, JSON.stringify(bundle([track([restBar(), restBar()])], [video([0, 2], { videoId: "abc" })])));
     const cli = path.join(import.meta.dirname, "..", "bin", "psarc2gp.js");
-    const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf8", timeout: 20000 });
+    const env = { ...process.env, PSARC2GP_SECRETS: path.join(dir, "no-secrets.json") };
+    delete env.PSARC2GP_PASSWORD; // never fetch real audio from a test
+    const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf8", timeout: 20000, env, input: "" });
     let r = run(f);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /--audio <file/);
