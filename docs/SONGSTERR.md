@@ -3,7 +3,13 @@
 Status: **plan agreed in outline, not built** (2026-11-04). Every part has been tried end to end in
 throwaway experiments (lab pages in `.samples/songsterr-lab/`, git-ignored): Songsterr data by bookmarklet,
 audio by conversion API, a `.gp` in Guitar Pro 8. No hosting needed. Product intent for the rest of the project is in
-[PRODUCT.md](PRODUCT.md); this document adds a second input and becomes decisions 15+ there when built.
+[PRODUCT.md](PRODUCT.md); this document adds a second input, replaces decision 5 there (".psarc is the only
+input") and becomes decisions 15+ when built.
+
+Reviewed 2026-11-04 before building: stale "each user's own key" text removed (the shared, encrypted key is
+the decision), and gaps added below (repeat endings and jumps, library name clashes, revoking access,
+audio duration parsing, MP3 offset, per-bar sync as a ground-rule change). A psarc baseline snapshot was
+taken at commit 2167034 (15 charts, 0 errors), see "Don't break psarc".
 
 ## Goal
 
@@ -26,7 +32,7 @@ bookmarklet only reads it and hands it to psarc2gp:
 |---|---|---|
 | song metadata (revision, `image`, artist, title, tracks, tunings, video list) | the page's own state, `<script id="state" type="application/json">` → `meta.current` | none |
 | video sync points | the page's own `/api/video-points/{id}/{rev}/list` response, read from the browser cache (`fetch(url, { cache: "only-if-cached", mode: "same-origin" })`, which fails rather than going to the network) | none |
-| track JSON | Songsterr's CDN, fetched by psarc2gp itself (the CDN allows other origins and plain requests) | none to the API |
+| track JSON | Songsterr's CDN, fetched by psarc2gp itself (the CDN allows other origins and plain requests); a **saved** bundle carries every track's JSON too (below) | none to the API |
 
 If the cache read fails (another browser, cache cleared), the bookmarklet asks the user's browser for the
 points once (one same-origin request from the user's session, like the page's own), and says so.
@@ -37,7 +43,14 @@ The state also holds the signed-in visitor's account (email, name, linked accoun
 Handoff: the bookmarklet opens the web app (`window.open`, while the click still counts as a user
 gesture), waits for its "ready" message and `postMessage`s the bundle to the web app's origin only; the web
 app accepts bundles only from `https://www.songsterr.com`. A "save bundle (.json)" link is the fallback,
-and is also how the CLI gets songs (below).
+and is also how the CLI gets songs (below). A saved bundle includes every track's JSON (fetched from the CDN
+by the bookmarklet when the user saves), so it converts offline, keeps working if the CDN later wants a
+signed-in session, and is a complete test fixture. The `postMessage` bundle leaves the tracks out; the web
+app fetches only the ones the user picks. Bundles hold copyrighted tabs: `.samples/` only, never git.
+
+The handoff depends on `window.opener` surviving the `window.open`. A strict `Cross-Origin-Opener-Policy`
+on either side would cut it; the lab handoff worked, so neither side blocks it today. If that changes,
+"save bundle" still works, and the bookmarklet should say so when no "ready" arrives within a few seconds.
 
 Proven in the lab (user's Firefox 159, Turnstile – UNDERWATER BOI): the bookmarklet ran on Songsterr's
 page, read the metadata from the state and all 8 videos' points from the cache, identical to what the API
@@ -78,6 +91,9 @@ changes.
    `signature`, `marker` (sections), `repeatStart`, `repeat` (count). Seen on guitar/bass: ties, slides,
    hammer/pull (`hp`), bends, vibrato, palm mute, let ring, dead and ghost notes, accents, staccato,
    harmonics, grace notes, tremolo bar, wah; tempo automations per track.
+   **Not yet seen:** alternate endings (voltas) and jumps (D.S., D.C., coda, fine). Neither test song has
+   them. They change which bars are played, so the point mapping depends on them: find a song with each,
+   save its bundle, and record the field names here before writing the mapping.
 9. **alphaTab already writes the sync, repeats included.** A test score with a repeated bar and
    `\sync (bar occurrence ms ratio)` exported `BarOccurrence` 0/1, a separate `ModifiedTempo` for the
    slower second pass (96 vs 120, correct) and `FramePadding` from the first point. So the psarc pipeline
@@ -97,7 +113,8 @@ Songsterr page ──bookmarklet──► bundle { meta, points, cdn }
           │                                                │
           └──► src/songsterr/: tracks from CDN → alphaTex + \sync → alphaTab → .gp
                                    ▲
-YouTube videoId ──► MP3 bytes from a third-party conversion API (user's own key), read by the page / CLI
+YouTube videoId ──► MP3 bytes from a third-party conversion API (shared key, unlocked by a password),
+                    read by the page / CLI; or an audio file the user drops in
 ```
 
 ### 1. Bookmarklet: `web/songsterr-bookmarklet.js`
@@ -121,15 +138,29 @@ self-contained; it sends nothing anywhere but the user's own web app tab.
   - pick the video: the default entry if its point count matches; otherwise a matching `alternative`
     (all countries first); `backing` and the other kinds when asked for. Non-matching entries are listed as
     unusable, never stretched to fit.
-  - map points to played bars in alphaTab's playback order (repeats expanded) → `\sync (bar occurrence ms 0)`;
-    if a song's points ever equal the written-bar count instead, map one per written bar; anything else is
-    refused for that video.
-  - last bar: end time = its start + its written length at the previous bar's audio tempo.
+  - map points to played bars in alphaTab's playback order → `\sync (bar occurrence ms 0)` (ratio 0 = bar
+    start, as the psarc code writes it). Playback order means repeats expanded, **alternate endings taken
+    on their pass, and jumps (D.S./D.C./coda/fine) followed**. Compute the order once, in one function, and
+    check it against alphaTab's own (its MIDI generator's bar sequence) in a test, so the two never drift;
+    if alphaTab 1.8.4 doesn't follow jumps, write the jumps out as plain bars or refuse the song with a clear
+    message rather than sync it wrong. If a song's points ever equal the written-bar count instead, map one
+    per written bar; anything else is refused for that video.
+  - last bar: end time = its start + its written length at the previous bar's audio tempo. (The lab's
+    `audio.html` reused the previous bar's audio length instead, which is wrong when the last bar's length
+    differs.)
   - anacrusis: give a pickup bar the length the points give it (try alphaTab's anacrusis flag; verify in GP8).
+  - one point per bar, not per beat: tempo changes inside a bar aren't in Songsterr's data, so the audio
+    tempo is constant across each bar. This is a deliberate exception to "every chart beat gets a sync point"
+    (see Ground-rule changes).
 - **convert.js**: `convertSongsterr({ bundle, tracks, video, audio }) → { gp, report }` with the same
   RSE/mute options as `convertPsarc`. Sounds from Songsterr's `instrumentId` (bass → finger bass,
-  distortion/overdrive → drive guitar, clean/acoustic → clean). Output name `Artist - Title.gp`, same
-  safety rules (never overwrite by default).
+  distortion/overdrive → drive guitar, clean/acoustic → clean). Output name
+  **`Artist - Title (Songsterr).gp`**, same safety rules (never overwrite by default). The suffix matters:
+  the web library's key is the lowercased file name (`songId(name)` in `web/library.js`), so a plain
+  `Artist - Title.gp` would collide with the `.psarc` version of the same song (the queue says "exists" and
+  "Replace" overwrites the psarc file), and the CLI would skip it in a shared output folder. Another video
+  or revision of the same Songsterr song is still the same name: "exists"/"Replace" as today, with the
+  video and revision shown so the user knows what they're replacing.
 
 ### 3. Audio: a third-party conversion API, no hosting of our own
 
@@ -148,7 +179,10 @@ Tried in the lab (`.samples/songsterr-lab/audio.html`, 2026-11-04, user's key, U
 | `.gp` with the MP3 embedded, Songsterr's points | user in GP8: sections appear to line up ("hard to tell" with placeholder notes; recheck with real notes) |
 
 MP3 is embedded as delivered (GP8 plays MP3; the click test landed on the beat). Same video ID → same
-timeline as Songsterr's points; nothing is cut.
+timeline as Songsterr's points; nothing is cut. **But don't assume a zero offset:** re-encoding to MP3
+usually adds an encoder delay (typically ~25–50 ms of silence at the start), and whether Guitar Pro skips it
+depends on the file's gapless header. Measure it once in step 2 (a song with a clear attack on bar 1, or
+the click test against Songsterr's points) and put the result in that provider's `offsets` entry.
 
 #### Swappable audio sources (the user's requirement)
 
@@ -159,7 +193,9 @@ config; nothing else in the converter, the web app or the CLI changes.
 ```
 src/songsterr/audio/
   index.js            getAudio(videoId, options): runs the configured providers in order, validates the result
+  config.js           which providers, in what order, and their offsets (plain data, no secrets)
   validate.js         format and length checks, shared by every provider
+  duration.js         MP3 and M4A duration from the bytes (no decoder needed)
   providers/
     rapidapi-youtube-mp310.js   today's provider
     file.js                     "use an audio file I have" (always available, needs no secret)
@@ -178,12 +214,18 @@ src/songsterr/audio/
   plays (Opus/WebM refused with a clear message, since GP8 won't play them); the audio is long enough to
   cover the last sync point; a size sanity limit. A provider that returns something else is treated as
   `failed`.
-- **Configuration**, `web/songsterr-audio.json`, committed (no secrets in it):
-  `{ "providers": ["rapidapi-youtube-mp310", "file"], "offsets": { "rapidapi-youtube-mp310": 0 } }`.
-  The list is the fallback order: on `unavailable` or `failed`, the next provider is tried; on `auth`,
-  `quota` or `not-found` the user is told, since another API wouldn't fix a private video. `file` last means
-  the user is always offered "drop an audio file". The CLI reads the same file, overridable with
-  `--audio-provider`.
+- **Duration without a decoder** (duration.js): the length check and the report's `audioSeconds` need the
+  audio's duration, but Node and the conversion worker have no `decodeAudioData`. MP3: the Xing/Info or
+  VBRI header's frame count (plus LAME's delay/padding fields, which also give the encoder offset above),
+  else count frame headers. M4A: `mvhd`/`mdhd` duration ÷ timescale. Plain Uint8Array/DataView code, tested
+  on tiny synthetic files (frame headers and boxes written by the test, no real audio in git).
+- **Configuration**, `src/songsterr/audio/config.js`, committed (no secrets in it):
+  `export default { providers: ["rapidapi-youtube-mp310", "file"], offsets: { "rapidapi-youtube-mp310": 0 } }`.
+  A module rather than a JSON file under `web/`: Node and the browser import it the same way, so `src/`
+  stays free of fs-or-fetch code (only ww2ogg's codebook load needs that). The list is the fallback order:
+  on `unavailable` or `failed`, the next provider is tried; on `auth`, `quota` or `not-found` the user is
+  told, since another API wouldn't fix a private video. `file` last means the user is always offered "drop
+  an audio file". The CLI uses the same config, overridable with `--audio-provider`.
 - **Per-provider offset** (`offsets`, ms, default 0): if a provider's audio turns out shifted (encoder
   padding, a trimmed start), one number corrects every song from it, measured once with a known song.
 - **Secrets per provider:** the encrypted key file (below) holds `{ providerId: secret }`, so a new API's
@@ -191,7 +233,8 @@ src/songsterr/audio/
 - **Provenance:** each Songsterr song in the library and each CLI report records which provider supplied
   the audio, so a bad provider can be spotted and its songs redone.
 - **Tests:** a contract test every provider must pass, using recorded responses and a fake `fetch`
-  (success, bad key, quota, missing video, wrong format, too short); plus the shared checks.
+  (success, bad key, quota, missing video, wrong format, too short); plus the shared checks. Recorded
+  responses keep only the JSON and headers; audio bodies are synthetic bytes (no recordings in git).
 
 **If hosting becomes necessary** (the API disappears, or alternatives keep failing): `helper.js` talks to
 a small server of ours with a fixed, minimal interface, fixed now so the server can be written later
@@ -207,6 +250,10 @@ refused by YouTube.
 The user's decision: friends use the user's own RapidAPI key (free plan, no payment details on the account,
 so low risk; one shared monthly quota), but the key must not be readable from GitHub.
 
+- **A RapidAPI account just for this.** A RapidAPI key works for every API its account subscribes to, so
+  the shared key should come from an account subscribed only to YouTube MP3 (free plan, no card). Then the
+  worst a leaked key can do is use up that quota.
+
 - **Encrypted in the repo and site.** `web/songsterr-secrets.json` holds the audio providers' secrets,
   `{ providerId: secret }` (today just the RapidAPI key), encrypted together with one password (WebCrypto:
   PBKDF2-SHA-256 with a high iteration count and a random salt → AES-GCM). Without the password it is opaque
@@ -215,11 +262,24 @@ so low risk; one shared monthly quota), but the key must not be readable from Gi
   as arguments, so they stay out of shell history); adding a provider's key, rotating a key or changing the
   password = run it again and push. The user chose a simple password (low risk accepted: the encrypted file is public, so a short
   password can be guessed offline).
+- **Revoking access means a new key, not a new password.** Every earlier version of the encrypted file
+  stays in git history (and in anyone's clone), and the old password still opens it. If it held the same
+  key, changing the password locks nobody out. To cut access: regenerate the key in RapidAPI, then encrypt
+  the new key (with a new password if wanted) and push. Browsers that stored the old key get `auth` and
+  ask for the password again.
 - **Unlocking:** the web app decrypts the key in the browser and keeps it in that browser's storage.
   Ways in: a password prompt the first time Songsterr audio is needed; an **invite link**
-  `…/#unlock=<password>` (the fragment is never sent to GitHub Pages or link-preview bots; the app reads it,
-  unlocks, and removes it from the address bar); and the **bookmarklet**, which carries the password and
-  hands it over with each song.
+  `…/#unlock=<password>`; and the **bookmarklet**, which carries the password and hands it over with each
+  song.
+- **The invite link and the app's routes.** The app already routes by fragment (`#/`, `#/play/<id>`).
+  `#unlock=` is read before the first `route()` runs and removed with `history.replaceState` (setting
+  `location.hash` would leave it in the back history), then routing continues at `#/`. What the fragment
+  does and doesn't protect: it isn't sent to GitHub Pages in requests, but the full link, password
+  included, stays wherever it is pasted (the chat app that carries the invite, the browser's history and
+  bookmark sync). Fine for this key; send invites by direct message, not a public channel.
+- **The CLI unlocks the same file:** it reads `web/songsterr-secrets.json` and asks for the password at a
+  prompt, or takes it from `PSARC2GP_PASSWORD` (for scripts). One place for the key, rotated with one tool;
+  no separate key in the environment.
 - **Safari's 7-day rule** (it deletes a site's stored data after 7 days of Safari use without a visit)
   doesn't cost a prompt: the bookmarklet lives in the bookmarks, which Safari never clears, and re-supplies
   the password; a bookmarked invite link does the same for direct visits; a web app added to the Dock or
@@ -250,48 +310,73 @@ on users' machines (user: no).
 ### 4. CLI
 
 `node bin/psarc2gp.js <file.psarc | folder | songsterr-bundle.json> ...`: `.json` bundles saved by the
-bookmarklet go the new way, everything else is unchanged. The CLI fetches the tracks from the CDN and the
-audio through the same API (key from the environment). Options:
-`--video default|backing|solo|playthrough|<videoId>`, `--list-videos`, `--audio file`, `--no-audio`.
+bookmarklet go the new way, everything else is unchanged (folders are still searched for `.psarc` only, so
+a stray `.json` in a chart folder is never picked up). The CLI uses the tracks inside the saved bundle (the
+CDN only for a bundle without them) and fetches the audio through the same providers (password as in §3).
+Output goes next to the bundle or into `--out`, named as in §2. Options:
+`--video default|backing|solo|playthrough|<videoId>`, `--list-videos`, `--audio file`, `--no-audio`,
+`--audio-provider <id>`.
 
 ### 5. Web app
 
-- A Songsterr page: the bookmarklet button to drag, and a field for the user's RapidAPI key (with a link to
-  get a free one), kept in this browser only.
+- A Songsterr page: the bookmarklet button to drag (it carries the web app's address, plus the password
+  once this browser is unlocked; before that it works without one and the song needs a dropped audio file,
+  so the page says to drag it again after unlocking), and the settings panel from §3: key unlocked or
+  not, enter or change the password, forget it, "Copy invite link".
 - Receiving a bundle: show the song, the usable videos (default preselected; backing tracks with what they
-  leave out) and the tracks; fetch the tracks from the CDN and the audio through the API, convert in the
-  existing worker, and add the song to the library with `source: "songsterr"` plus songId/revisionId/videoId.
-- No key yet: the user is asked for one, or can drop an audio file instead. `.psarc` conversion is
-  unaffected and still never uploads anything.
+  leave out) and the tracks; fetch the tracks from the CDN and the audio through the providers, convert in
+  the existing worker, and add the song to the library with `source: "songsterr"` plus
+  `songsterrId`/`revisionId`/`videoId`/`audioProvider` (not `songId`, which is already `library.js`'s
+  name-to-key function).
+- Not unlocked yet: the password prompt appears in this flow only, or the user drops an audio file instead.
+  `.psarc` conversion is unaffected and still never uploads anything.
+- Changing the library's record shape needs no IndexedDB version bump (records are schemaless and the new
+  fields are optional), but the list view must cope with records that lack them.
 
 ## Ground-rule changes (record in CLAUDE.md/PRODUCT.md when building)
 
 - **Songsterr is a second input**, read by a bookmarklet in the user's own browser; psarc2gp never calls
   Songsterr's API itself and never works around its bot filter.
-- **The audio comes from a third-party conversion API with the user's own key**, sent only to that API
-  and kept only in the user's browser (or the CLI's environment). No server of ours, no tools to install;
-  the `.psarc` path keeps "one runtime, one dependency, no native tools" and never touches the network.
-  The site stays static: it sends a video ID to the API, never a chart, tab or account data.
+- **The audio comes from a third-party conversion API with one shared key**, committed only encrypted
+  (`web/songsterr-secrets.json`), unlocked by a password, sent only to that API, and stored decrypted only
+  in the user's browser. No server of ours, no tools to install; the `.psarc` path keeps "one runtime, one
+  dependency, no native tools" and never touches the network. The site stays static: it sends a video ID
+  to the API, never a chart, tab or account data. (PRODUCT.md decision 11, "no server ever receives
+  files", still holds: a video ID isn't a file.)
+- **Sync for Songsterr songs is per bar, not per beat**, because that is what Songsterr's points give. The
+  "every chart beat gets a sync point" rule stays for `.psarc`; for Songsterr the rule is "every played bar
+  gets a sync point, from the chosen video's own points, never stretched to fit".
 - **New easy-to-get-wrong facts:** Songsterr string 0 = highest (alphaTex string = Songsterr + 1); points
   are per played bar with no end point; listed videos often don't fit the revision; the page state holds
-  the visitor's account, so copy song fields only.
+  the visitor's account, so copy song fields only; changing the secrets password revokes nothing (rotate
+  the key); Songsterr output is named `… (Songsterr).gp` because library keys are file names.
 
 ## Don't break psarc
 
 - `src/convert.js` and `src/notation/` stay as they are; Songsterr code lives in `src/songsterr/`. Shared
   helpers move only if `tools/snapshot.js` shows identical output for the whole library.
-- Before each merge: `npm test`, and `tools/snapshot.js --compare` over `.samples/` (and the user's library
-  on the PC) reports no change.
+- Before each merge: `npm test`, and `tools/snapshot.js --compare` against the baseline reports no change.
+  Baseline: `.samples/psarc-baseline.json` (git-ignored), taken on the Mac at commit 2167034 from the
+  user's Rocksmith CDLC folder in their Google Drive music folder (15 charts, 0 errors, ~17 s). Re-run the
+  same command after a change and compare:
+  `node tools/snapshot.js .samples/psarc-after.json "<music folder>/Rocksmith_Custom_DLC"` then
+  `node tools/snapshot.js --compare .samples/psarc-baseline.json .samples/psarc-after.json`.
+  `.samples/` on the Mac has no charts of its own, so `npm test`'s sample tests skip there; the snapshot is
+  the psarc check on this machine. The PC library is the wider check before a release.
+- If `main` changes the converter while this branch is open, retake the baseline from `main` first, or the
+  comparison shows `main`'s changes as regressions.
 - The web app's psarc queue path stays as is; Songsterr songs are a new kind of queue item.
 
 ## Verification
 
 - Unit tests on small hand-written Songsterr-shaped JSON (no copyrighted tabs in git): durations, tuplets,
-  ties, techniques, repeats, string numbering, video choice, point→bar mapping for each count case, last
-  bar, anacrusis, negative points, bundle validation.
+  ties, techniques, repeats, alternate endings, jumps, string numbering, video choice, point→bar mapping
+  for each count case (and our played order equal to alphaTab's), last bar, anacrusis, negative points,
+  bundle validation, output name, MP3/M4A duration.
 - Bundles and track JSON for 3–4 real songs in `.samples/songsterr/` (git-ignored), used by tests when
   present: one simple, one with repeats (UNDERWATER BOI), one with tempo changes, one with time-signature
-  changes.
+  changes, one with alternate endings, one with a D.S./coda. Where the user has a `.gp` of the same song in
+  the GuitarPro folder of their music library, compare bar counts and notes with it as a second opinion.
 - `tools/verify-songsterr.js`: bars complete, every note present, one sync point per played bar, implied
   tempo per bar within a sane range of the written tempo (flags bad points or the wrong video).
 - `tools/render-check.cjs` on the output; the user opens files in GP8 and listens (repeats and the first
@@ -301,25 +386,38 @@ audio through the same API (key from the environment). Options:
 
 ## Order of work
 
-1. `src/songsterr/` core (bundle, score with sync, convert) + CLI reading a saved bundle with `--audio file`;
-   tests. psarc snapshot unchanged. First real check: UNDERWATER BOI bass with **real notes** and its
-   default video, played by the user in GP8 (the placeholder test was "hard to tell").
-2. `src/songsterr/audio/` (contract, shared checks, the RapidAPI and file providers, contract tests) and
-   `tools/encrypt-secrets.js`; used by the CLI.
-3. The real bookmarklet + the web app's Songsterr page: key field, bundle handling, video choice,
-   conversion in the worker, library.
+0. Before code: save bundles (with track JSON) for a song with alternate endings and one with a D.S./coda,
+   record their field names in finding 8, and check whether alphaTab 1.8.4's playback follows jumps.
+   The lab bookmarklet needs only the "include tracks" addition for this.
+1. `src/songsterr/` core (bundle, score with sync and played order, convert) + CLI reading a saved bundle
+   with `--audio file`; tests. psarc snapshot unchanged against the baseline. First real check:
+   UNDERWATER BOI bass with **real notes** and its default video, played by the user in GP8 (the
+   placeholder test was "hard to tell").
+2. `src/songsterr/audio/` (contract, config, shared checks, duration.js, the RapidAPI and file providers,
+   contract tests) and `tools/encrypt-secrets.js` (on the dedicated RapidAPI account's key); used by the
+   CLI. Measure the provider's MP3 offset and record it in config.js.
+3. The real bookmarklet + the web app's Songsterr page: settings panel and unlocking (prompt, invite link
+   before routing, bookmarklet), bundle handling, video choice, conversion in the worker, library.
 4. `tools/verify-songsterr.js`; bookmarklet in Chrome and Safari.
-5. README, PRODUCT.md decisions, CLAUDE.md facts. Then drums and vocals.
+5. README, PRODUCT.md decisions (5 replaced, 15+ added), CLAUDE.md facts and ground rules. Then drums and
+   vocals.
 
 ## Risks
 
 - **Songsterr changes its page** (state layout, API addresses, CDN). Mitigation: the bookmarklet is small
   and easy to update (users drag the button again); clear messages when a field is missing; saved bundles
-  as test fixtures.
+  as test fixtures. A stricter `Cross-Origin-Opener-Policy` would break the `postMessage` handoff (§1);
+  "save bundle" is the fallback. If the CDN starts wanting a signed-in session, saved bundles (which carry
+  the tracks) keep working and the web app would need the bookmarklet to send the tracks too.
 - **The conversion API goes away or changes** (such services come and go). Mitigation: audio sources are
   plug-ins chosen by config, with a fallback order (§3); another API is one provider file plus a config
   change; "drop an audio file" always works; our own server has a fixed interface ready if needed.
-- **Quota.** The free plan's monthly quota is per key; each user has their own.
+- **Quota.** The free plan's monthly quota is per key, and the user and friends share one key, so one busy
+  user can use it up for everyone. Mitigation: `quota` gets its own message ("this month's shared audio
+  allowance is used up; drop an audio file or try next month"); converted songs keep their audio, so only
+  new songs need the API; if it's hit regularly, a paid tier or a second provider in the config.
+- **Key exposure.** Anyone with the password, and any script on Songsterr's page while the bookmarklet runs,
+  can read the key. Accepted for a free, card-less, single-API account; revoke by rotating the key (§3).
 - **Terms of service.** Extracting Songsterr's data and downloading YouTube audio likely break both sites'
   terms. Fine for personal practice is the user's judgment (agreed); nothing (tabs, audio, `.gp`, bundles,
   keys) goes into git or onto the public site.

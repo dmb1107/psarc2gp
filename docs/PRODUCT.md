@@ -109,6 +109,7 @@ Any change should keep these, and `tools/verify.js` / `tools/sweep.js` / `npm te
 4. **Port ww2ogg instead of shipping vgmstream.** One program, no external executables, testable
    anywhere, and a browser version stays possible.
 5. **`.psarc` is the only input.** ToneLib `.song` files are used only as a test reference for notation.
+   (To be replaced when Songsterr input is built: see [SONGSTERR.md](SONGSTERR.md).)
 6. **Notation aims for the best practice experience, not for matching ToneLib** (the user's
    instruction). Deliberate differences, all documented in the README:
    - notes with no charted length fill to the next note but not across a bar line (ToneLib ties
