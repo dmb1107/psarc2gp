@@ -47,7 +47,7 @@ async function run({ videoId, secret, fetch = globalThis.fetch, signal, onProgre
 
   const link = body?.downloadUrl ?? body?.link ?? body?.url;
   if (typeof link !== "string" || !link) {
-    if (/private|unavailable|not found|removed|copyright|region|age/i.test(said)) throw new AudioError("not-found", `the API said: ${said}`);
+    if (/private|unavailable|not found|removed|copyright|region|country|age/i.test(said)) throw new AudioError("not-found", `the API said: ${said}`);
     throw new AudioError("failed", `no download link in the API's answer${said ? `: ${said}` : ""}`);
   }
   let url;

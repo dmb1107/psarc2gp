@@ -77,3 +77,14 @@ export async function getAudio(videoId, { providers = config.providers, secrets 
   primary.quotas = quotas;
   throw primary;
 }
+
+// Why each audio service that was asked couldn't deliver, for a failed getAudio: the user reads the first
+// one's error, and this adds the backup's. [{ provider, service: "Main service" | "Backup service", reason }]
+// with the provider's own detail as reason; services passed over for lack of a key, and the file, aren't
+// listed. The same names as the setup page's allowance lines.
+export function attemptReasons(err, providers = config.providers) {
+  const fetching = providers.filter((id) => id !== "file");
+  return (err?.attempts ?? [])
+    .filter((a) => a.provider !== "file" && !a.error.missingSecret)
+    .map((a) => ({ provider: a.provider, service: a.provider === fetching[0] ? "Main service" : "Backup service", reason: a.error.message }));
+}

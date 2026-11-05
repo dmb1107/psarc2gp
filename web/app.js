@@ -235,6 +235,8 @@ async function finish(item, result) {
     item.state = "error";
     item.message = result?.code ? err.message // an audio error: already in the users' wording
       : /quota/i.test(err.name ?? "") || /quota/i.test(err.message) ? "not enough room in this browser's storage" : err.message;
+    // with a backup, each service's own reason (the message above is the first one's)
+    item.reasons = result?.tried?.length > 1 ? result.tried.map((t) => `${t.service}: ${t.reason}`) : [];
   }
   if (item.job) delete item.job.secrets; // not kept around once used
   renderQueue();
@@ -271,6 +273,7 @@ function renderQueue() {
       case "error":
         state(`Couldn't convert: ${item.message}`, "error");
         if (item.kind === "songsterr") button("Back to the song", () => { location.hash = "#/songsterr"; });
+        if (item.reasons?.length) li.append(el("p", { className: "q-warn", textContent: item.reasons.join("\n") }));
         break;
     }
     if (item.warnings?.length) li.append(el("p", { className: "q-warn", textContent: item.warnings.map((w) => `Note: ${w}`).join("\n") }));

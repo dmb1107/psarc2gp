@@ -105,7 +105,7 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 .q-state { color: var(--muted); }
 .q-state.error { color: var(--danger); }
 .q-state.done { color: var(--fg); }
-.q-warn { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin: 0; }
+.q-warn { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin: 0; white-space: pre-line; }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid var(--line); border-top-color: var(--accent);

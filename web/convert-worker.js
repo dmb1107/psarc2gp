@@ -108,6 +108,7 @@ self.onmessage = async ({ data: msg }) => {
       detail: audioError ? err.message : null,
       code: audioError ? err.code : null,
       missingSecret: !!err?.missingSecret,
+      tried: audioError ? am.attemptReasons(err) : [], // each service's reason, the backup's too
     }));
   }
 };

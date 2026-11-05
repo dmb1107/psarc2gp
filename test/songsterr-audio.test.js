@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { getAudio, PROVIDERS, needsSecrets, AudioError, describeAudioError, AUDIO_ERROR_CODES, config, readQuota, describeQuota } from "../src/songsterr/audio/index.js";
+import { getAudio, PROVIDERS, needsSecrets, AudioError, describeAudioError, AUDIO_ERROR_CODES, config, readQuota, describeQuota, attemptReasons } from "../src/songsterr/audio/index.js";
 import { encryptSecrets, decryptSecrets } from "../src/songsterr/secrets.js";
 import { convertSongsterr } from "../src/songsterr/convert.js";
 import { timing as mp36Timing, parseSecret } from "../src/songsterr/audio/providers/rapidapi-youtube-mp36.js";
@@ -141,6 +141,24 @@ test("RapidAPI: the key goes in the RapidAPI headers, other answers map to codes
   await assert.rejects(run([[API, json(200, { downloadUrl: `${FILE}x` })], [FILE, bytes(new Uint8Array(1), 503)]]), { code: "unavailable" });
   await assert.rejects(run([[API, json(200, { downloadUrl: `${FILE}x` })], [FILE, offline]]), { code: "unavailable" });
   await assert.rejects(getAudio("not a video", { providers: [id], secrets: { [id]: "k" }, fetch: offline }), { code: "not-found" });
+});
+
+test("when both services fail, each one's reason is listed (the backup's too)", async () => {
+  const first = "rapidapi-youtube-mp310", backup = "rapidapi-youtube-mp36";
+  const routes = [
+    [API, json(200, { downloadUrl: `${FILE}broken.mp3` })],
+    [`${FILE}broken.mp3`, () => json(502, { message: "Download failed" })()],
+    [MP36, json(200, { status: "fail", msg: "Video is not available in your country" })],
+  ];
+  const e = await getAudio(VIDEO, { secrets: { [first]: "k1", [backup]: "k2" }, fetch: fakeFetch(routes) }).catch((x) => x);
+  assert.equal(e.provider, first, "the first service's error is the one users read");
+  assert.deepEqual(attemptReasons(e), [
+    { provider: first, service: "Main service", reason: "the file host files.example answered 502" },
+    { provider: backup, service: "Backup service", reason: "the API said: Video is not available in your country" },
+  ]);
+  // a backup with no key isn't listed
+  const solo = await getAudio(VIDEO, { secrets: { [first]: "k1" }, fetch: fakeFetch(routes) }).catch((x) => x);
+  assert.deepEqual(attemptReasons(solo).map((r) => r.service), ["Main service"]);
 });
 
 // ---- the monthly allowance

@@ -18,7 +18,7 @@ const HOST = "youtube-mp36.p.rapidapi.com";
 export const timing = { pollMs: 1000, maxWaitMs: 4 * 60 * 1000 };
 
 const isAbort = (e, signal) => signal?.aborted || e?.name === "AbortError";
-const NOT_FOUND = /private|unavailable|not found|removed|copyright|region|age|sign in|members|invalid (video|id)/i;
+const NOT_FOUND = /private|unavailable|not found|removed|copyright|region|country|age|sign in|members|invalid (video|id)/i;
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
