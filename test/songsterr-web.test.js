@@ -39,9 +39,10 @@ function fakeSongsterr({ cached = true, pointsStatus = 200, popup = true, host =
     remove() { this.removed = true; }, click() { this.onclick?.({ preventDefault() {} }); },
   });
   const body = make("body");
-  const win = { posted: [], postMessage(data, origin) { this.posted.push({ data, origin }); } };
+  const win = { posted: [], postMessage(data, origin) { this.posted.push({ data, origin }); }, close() { this.closed = true; } };
   const listeners = [];
   const timers = [];
+  const timeouts = [];
   const env = {
     location: { hostname: host, pathname: path, href: `https://${host}${path}#x` },
     document: {
@@ -56,7 +57,7 @@ function fakeSongsterr({ cached = true, pointsStatus = 200, popup = true, host =
       if (opts.cache === "only-if-cached" && !cached) throw new TypeError("not cached");
       return { ok: pointsStatus === 200, status: pointsStatus, json: async () => points };
     },
-    setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {}, setTimeout: () => 0,
+    setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval() {}, setTimeout: (f) => { timeouts.push(f); return 0; },
     URL, Blob, JSON,
   };
   const text = () => {
@@ -64,7 +65,7 @@ function fakeSongsterr({ cached = true, pointsStatus = 200, popup = true, host =
     (function walk(e) { if (e.textContent) all.push(e.textContent); e.children?.forEach(walk); })(body);
     return all.join("\n");
   };
-  return { env, win, requests, timers, text, message: (data, from = win, origin = new URL(APP).origin) => listeners.forEach((f) => f({ source: from, origin, data })) };
+  return { env, win, requests, timers, timeouts, text, message: (data, from = win, origin = new URL(APP).origin) => listeners.forEach((f) => f({ source: from, origin, data })) };
 }
 
 // objects made inside the vm have its own prototypes: compare their JSON
@@ -106,6 +107,7 @@ test("bookmarklet: hands the song over after the app says ready, song fields onl
   assert.equal(page.win.posted.filter((p) => p.data.type === "psarc2gp-song").length, 1);
   page.message({ type: "psarc2gp-received" });
   assert.match(page.text(), /Sent to tab2gp/);
+  assert.doesNotMatch(page.text(), /Save the song/, "the .json is offered only when the handoff fails");
 });
 
 test("bookmarklet: no password when the button was built locked", async () => {
@@ -140,6 +142,15 @@ test("bookmarklet: a song address with the chosen track's number (…-s514895t0)
   assert.match(other.text(), /Open a song on www\.songsterr\.com/);
 });
 
+test("bookmarklet: offers the song as a .json only when tab2gp doesn't answer", async () => {
+  const page = fakeSongsterr();
+  await run(page);
+  assert.doesNotMatch(page.text(), /Save the song/);
+  page.timeouts[0](); // 20 s without "ready"
+  assert.match(page.text(), /didn't answer/);
+  assert.match(page.text(), /Save the song as a file/);
+});
+
 test("bookmarklet: says what's wrong instead of sending", async () => {
   const elsewhere = fakeSongsterr({ host: "example.com" });
   await run(elsewhere);
@@ -153,7 +164,9 @@ test("bookmarklet: says what's wrong instead of sending", async () => {
 
   const refused = fakeSongsterr({ cached: false, pointsStatus: 403 });
   await run(refused);
-  assert.match(refused.text(), /Couldn't read the video timings \(Songsterr answered 403\)/);
+  assert.match(refused.text(), /Couldn't find the video's timings \(Songsterr answered 403\)\. Reload this page/);
+  assert.match(refused.text(), /Reload the page/);
+  assert.ok(refused.win.closed, "the tab2gp tab it opened for nothing is closed");
   refused.message({ type: "psarc2gp-ready" });
   assert.ok(!refused.win.posted.some((p) => p.data.type === "psarc2gp-song"));
 });

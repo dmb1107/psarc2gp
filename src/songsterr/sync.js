@@ -26,8 +26,17 @@ export function playedBars(alphaTab, score, settings) {
 // "written" (one per written bar, only meaningful when they differ), or null (doesn't fit). A video
 // already fitted by fitVideos (or described by describeVideos) keeps its fit.
 const pointCount = (v) => (Array.isArray(v.points) ? v.points.length : v.points);
+// A video whose points go backwards has a mistake in Songsterr's timings (s421905's backing video
+// 2VCQhkaRRNY: 130.98 s between 65.34 and 69.78): it doesn't fit, and it isn't repaired (that would be
+// guessing a bar's time). Returns the index of the first point earlier than the one before it, or null.
+export function backwardsAt(video) {
+  if (!Array.isArray(video.points)) return video.backwardsAt ?? null; // described (describeVideos)
+  const i = video.points.findIndex((t, k) => k > 0 && t < video.points[k - 1]);
+  return i > 0 ? i : null;
+}
 export function fitOf(video, playedCount, writtenCount) {
   if (video.fit !== undefined) return video.fit;
+  if (backwardsAt(video) !== null) return null;
   const n = pointCount(video);
   if (n === playedCount) return "played";
   if (n === writtenCount) return "written";
@@ -110,7 +119,7 @@ export function restBarsUntil(points, played, barQuarters, lastEnd, audioEnd) {
 export function fitVideos(videos, quarters, writtenCount) {
   return videos.map((v) => {
     const fit = fitOf(v, quarters.length, writtenCount);
-    if (fit) return { ...v, fit };
+    if (fit || backwardsAt(v) !== null) return { ...v, fit };
     const j = findStrayPoint(v.points, quarters);
     if (j === null) return { ...v, fit: null };
     return { ...v, points: v.points.filter((_, i) => i !== j), fit: "played", strayPoint: j };
@@ -126,6 +135,7 @@ export function describeVideos(videos, playedCount, writtenCount) {
     points: pointCount(v),
     fit: fitOf(v, playedCount, writtenCount),
     strayPoint: v.strayPoint ?? null,
+    backwardsAt: backwardsAt(v),
   }));
 }
 
@@ -147,6 +157,8 @@ export function chooseVideo(videos, want, playedCount, writtenCount) {
   } else {
     const v = videos.find((x) => x.videoId === want);
     if (!v) throw new Error(`video ${want} isn't listed for this song`);
+    const back = backwardsAt(v);
+    if (back !== null) throw new Error(`video ${want}'s sync points go backwards at point ${back + 1} (a mistake in Songsterr's timings), so it can't be used`);
     if (!fits(v)) throw new Error(`video ${want} has ${pointCount(v)} sync points, but this tab revision plays ${playedCount} bars: it was synced to another revision`);
     pick = v;
   }

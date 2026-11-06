@@ -72,7 +72,9 @@
   const win = window.open(APP + "#/songsterr", "_blank");
   const status = say(win ? "Opening tab2gp…" : "The browser blocked the new tab: allow pop-ups for songsterr.com and click again, or save the song below.");
 
-  /* fallback: save the song as a file (with every track's tab) to open in tab2gp or the CLI */
+  /* fallback, offered only when the handoff fails (blocked tab, no answer): save the song as a file
+     (with every track's tab) to open in tab2gp or the CLI */
+  let failed = !win;
   const save = document.createElement("a");
   save.href = "#";
   save.textContent = "Save the song as a file (.json)";
@@ -99,6 +101,8 @@
     }
     saving = false;
   };
+  let offered = false;
+  const offerSave = () => { if (failed && bundle.videos && !offered) { offered = true; panel.appendChild(save); } };
 
   let ready = false, sent = false, hello = null;
   const send = () => {
@@ -119,7 +123,7 @@
     hello = setInterval(() => { try { win.postMessage({ type: "psarc2gp-hello" }, origin); } catch (e) { /* not there yet */ } }, 250);
     setTimeout(() => {
       clearInterval(hello);
-      if (!ready) { status.textContent = "tab2gp didn't answer. Is its tab open at " + APP + "? Save the song below and open the file there instead."; status.style.color = "#ff99a4"; }
+      if (!ready) { status.textContent = "tab2gp didn't answer. Is its tab open at " + APP + "? Save the song below and open the file there instead."; status.style.color = "#ff99a4"; failed = true; offerSave(); }
     }, 20000);
   }
 
@@ -138,14 +142,20 @@
         points = await r.json();
         say("The video timings weren't in the browser's cache, so they were asked for once.");
       } catch (e) {
-        fail("Couldn't read the video timings (" + (e && e.message || e) + "). Play the video on this page once, then click again.");
+        fail("Couldn't find the video's timings (" + (e && e.message || e) + "). Reload this page, wait until it has loaded (play the video once if it still fails), then click the bookmark again.");
+        const again = document.createElement("button");
+        again.textContent = "Reload the page";
+        again.style.cssText = "margin-top:8px;padding:4px 12px;border:0;border-radius:6px;background:#60cdff;color:#1b1b1b;font:600 13px system-ui,sans-serif;cursor:pointer";
+        again.onclick = () => location.reload();
+        panel.appendChild(again);
         clearInterval(hello);
         status.textContent = "";
+        try { win.close(); } catch (err) { /* already gone */ }
         return;
       }
     }
     bundle.videos = points.map((v) => ({ videoId: v.videoId, feature: v.feature, tracks: v.tracks, countries: v.countries, points: v.points }));
-    panel.appendChild(save);
+    offerSave();
     send();
   })();
 })();

@@ -30,10 +30,8 @@ export function validateBundle(b) {
   if (!Array.isArray(b.videos)) fail("no video list");
   for (const v of b.videos) {
     if (typeof v.videoId !== "string" || !v.videoId) fail("a video without a videoId");
+    // points that go backwards make only that video unusable (sync.js backwardsAt), not the song
     if (!Array.isArray(v.points) || !v.points.every(isNum)) fail(`video ${v.videoId}: points are not a list of numbers`);
-    for (let i = 1; i < v.points.length; i++) {
-      if (v.points[i] < v.points[i - 1]) fail(`video ${v.videoId}: points go backwards at ${i}`);
-    }
   }
   if (b.trackData != null) {
     if (!Array.isArray(b.trackData) || b.trackData.length !== s.tracks.length) fail("trackData doesn't match the track list");

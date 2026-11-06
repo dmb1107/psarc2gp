@@ -140,7 +140,9 @@ Songsterr:
   with no end point for the last bar. Map them in alphaTab's own play order (`playedBars` in sync.js reads
   its MIDI generator), not an order of our own.
 - Many listed videos were timed for older revisions and don't fit (wrong count); not even the default
-  always fits. A negative first point means the video starts after the tab (positive FramePadding).
+  always fits. A video whose points go backwards (a typo on Songsterr: s421905's 2VCQhkaRRNY has 130.98 s
+  between 65.34 and 69.78) doesn't fit and is never repaired (`backwardsAt` in sync.js); the song's
+  other videos still are (bundle validation once refused the whole song). A negative first point means the video starts after the tab (positive FramePadding).
 - The page state (`<script id="state">`) also holds the signed-in visitor's account: the bookmarklet copies
   song fields only.
 - Changing the secrets password revokes nothing (old versions of the file stay in git history with the

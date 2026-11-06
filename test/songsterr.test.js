@@ -207,6 +207,19 @@ test("video choice: default if it fits, else an alternative available everywhere
   assert.throws(() => chooseVideo(vids, "nope", 9, 6), /isn't listed/);
 });
 
+test("a video whose points go backwards is never used (nor repaired); the song's other videos are", () => {
+  // s421905, backing video 2VCQhkaRRNY: 130.98 between 65.34 and 69.78, the right count otherwise
+  const good = evenPoints(9);
+  const typo = [...good.slice(0, 5), 99, ...good.slice(6)];
+  const vids = fitVideos([video(typo, { videoId: "typo", feature: "backing" }), video(good, { videoId: "ok" })], Array(9).fill(4), 9);
+  assert.deepEqual(vids.map((v) => [v.videoId, v.fit]), [["typo", null], ["ok", "played"]]);
+  const described = describeVideos(vids, 9, 9);
+  assert.deepEqual(described.map((v) => v.backwardsAt), [6, null]);
+  assert.equal(chooseVideo(described, "default", 9, 9).videoId, "ok");
+  assert.throws(() => chooseVideo(described, "typo", 9, 9), /go backwards at point 7/);
+  assert.throws(() => chooseVideo(described, "backing", 9, 9), /no "backing" video fits/);
+});
+
 test("a stray point that splits one bar is left out; anything less clear is refused", () => {
   const quarters = Array(10).fill(4); // ten 4/4 bars at 2 s each
   const even = evenPoints(10, 2, 0.5);
@@ -581,7 +594,8 @@ test("bundle validation", () => {
   bad((b) => { b.version = 2; }, /version 2/);
   bad((b) => { delete b.song.revisionId; }, /revision id missing/);
   bad((b) => { b.videos[0].points = [1, "2"]; }, /not a list of numbers/);
-  bad((b) => { b.videos[0].points = [2, 1]; }, /go backwards/);
+  // points going backwards make that video unusable (sync.js), not the bundle
+  assert.doesNotThrow(() => validateBundle({ ...structuredClone(ok), videos: [video([2, 1])] }));
   bad((b) => { b.trackData[0].revisionId = 9; }, /revision 9, not 2/);
   bad((b) => { b.trackData = []; }, /doesn't match the track list/);
 });
