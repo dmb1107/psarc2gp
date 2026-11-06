@@ -93,6 +93,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
     const k = chosen.strayPoint - 1; // the played bar it fell in
     warn(`video ${chosen.videoId} has one sync point more than the tab has played bars: point ${chosen.strayPoint + 1} splits played bar ${k + 1} (written bar ${played[k].bar + 1}) in two and was left out`);
   }
+  if (chosen?.endPoint != null) warn(`video ${chosen.videoId} has one sync point more than the tab has played bars: the last one marks where the last bar ends`);
   if (chosen?.untimedEnd) {
     const n = chosen.untimedEnd;
     warn(`video ${chosen.videoId}'s timings stop ${n} bar${n === 1 ? "" : "s"} before the end of the tab: played bar${n === 1 ? "" : "s"} ${played.length - n + 1}${n === 1 ? "" : `-${played.length}`} follow at the song's closing tempo`);
@@ -103,7 +104,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   const barQuarters = (i) => score.masterBars[i].calculateDuration() / QUARTER_TICKS;
   const offsetMs = audio?.offsetMs ?? 0;
   let points = chosen?.points;
-  let sync = chosen && syncFromPoints(points, played, barQuarters, { writtenCount: written, offsetMs });
+  let sync = chosen && syncFromPoints(points, played, barQuarters, { writtenCount: written, offsetMs, endSeconds: chosen.endPoint ?? null });
   // the recording goes on after the tab: rest bars until it ends (sync.js restBarsUntil)
   let restBarsAdded = 0;
   if (sync && audio?.seconds != null) {
@@ -160,7 +161,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
       emptyBarsLeftOut,
       restBarsAdded,
       syncPoints: sync?.flat.length ?? 0,
-      video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null, untimedEnd: chosen.untimedEnd ?? null },
+      video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null, untimedEnd: chosen.untimedEnd ?? null, endPoint: chosen.endPoint ?? null },
       audioSeconds: audio?.seconds ?? null,
       audioProvider: audio?.provider ?? null,
       tracks: built.tracks.map((t) => ({ ...t, soundName: rse ? SOUNDS[t.sound].label : `MIDI program ${SOUNDS[t.sound].program}` })),

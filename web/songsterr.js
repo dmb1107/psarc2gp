@@ -557,13 +557,14 @@ function renderVideos() {
   }
   const usable = usableVideos(c.info);
   const preferred = c.video ?? suggestedVideo(c.info);
-  const names = c.bundle.song.tracks.map((t) => t.name);
+  const names = c.bundle.song.tracks.map((t, i) => t.name || t.instrument || `track ${i + 1}`); // some tracks have no name
   select.replaceChildren(...(usable.length ? [] : [el("option", { value: "", textContent: "No video fits" })]), ...usable.map((v) => {
     const parts = [FEATURE[v.feature] ?? v.feature];
     if (v.feature === "backing" && v.leavesOut?.length) parts.push(`without ${v.leavesOut.map((i) => names[i] ?? `track ${i + 1}`).join(", ")}`);
     if (!everywhere(v)) parts.push(v.countries.length <= 3 ? `only in ${v.countries.join(", ")}` : `only in ${v.countries.length} countries`);
     if (v.fit === "written") parts.push("repeats timed from their first pass");
     if (v.strayPoint != null) parts.push("one stray sync point left out");
+    if (v.endPoint != null) parts.push("its last point marks the end");
     if (v.untimedEnd) parts.push(`last ${v.untimedEnd === 1 ? "bar" : `${v.untimedEnd} bars`} at the closing tempo`);
     return el("option", { value: v.videoId, textContent: `${parts.join(", ")} (${v.videoId})`, selected: v.videoId === preferred });
   }));

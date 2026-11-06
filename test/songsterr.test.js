@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
-import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil, untimedEnd } from "../src/songsterr/sync.js";
+import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil, untimedEnd, lastPointEnds } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo, mp3SoundEnd } from "../src/songsterr/audio/duration.js";
 
@@ -251,6 +251,24 @@ test("convert: a video two bars short at the end syncs every bar, the last two a
   assert.equal(r.report.syncPoints, 11); // 10 bars + the end point
   assert.equal(r.report.video.untimedEnd, 2);
   assert.ok(r.report.warnings.some((w) => /stop 2 bars before the end of the tab: played bars 9-10 follow/.test(w)), r.report.warnings.join("; "));
+});
+
+test("one point too many at the end marks where the last bar ends; anything less clear is refused", () => {
+  // Nobody Speak (s687923): 130 bars, 131 points, the last one bar after the 130th
+  const quarters = [...Array(9).fill(4), 3]; // the last bar in 3/4
+  const pts = [...evenPoints(10, 2, 0), 19.6]; // the 3/4 bar ends 1.6 s after it starts (107% of the tempo)
+  assert.equal(lastPointEnds(pts, quarters), true);
+  assert.equal(lastPointEnds([...evenPoints(10, 2, 0), 18.4], quarters), false, "a last bar at 27% of the tempo");
+  assert.equal(lastPointEnds([...evenPoints(10, 2, 0), 21], quarters), false, "a last bar at 200%");
+  assert.equal(lastPointEnds(evenPoints(10, 2, 0), quarters), false, "the right count: not this function's business");
+  const [v] = fitVideos([video(pts, { videoId: "end" })], quarters, 10);
+  assert.deepEqual([v.fit, v.endPoint, v.points.length], ["played", 19.6, 10]);
+  assert.equal(describeVideos([v], 10, 10)[0].endPoint, 19.6);
+  // the sync uses it as the last bar's end instead of estimating one
+  const played = quarters.map((_, bar) => ({ bar, occurrence: 0 }));
+  const sync = syncFromPoints(v.points, played, (i) => quarters[i], { writtenCount: 10, endSeconds: v.endPoint });
+  assert.equal(sync.endSeconds, 19.6);
+  assert.equal(syncFromPoints(v.points, played, (i) => quarters[i], { writtenCount: 10 }).endSeconds, 19.5, "estimated at the bar before's tempo");
 });
 
 test("a stray point that splits one bar is left out; anything less clear is refused", () => {

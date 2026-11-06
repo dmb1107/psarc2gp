@@ -146,9 +146,28 @@ export function untimedEnd(points, quarters, played) {
   return out;
 }
 
+// One point too many, at the end: the last point marks where the last bar ends (Nobody Speak, s687923,
+// revision 10051637: 130 bars at 160 bpm, no repeats, three videos with 131 points; one per bar they keep
+// within 15% of the tab's tempo on every bar but the first, the 3/4 bars included, and the 131st comes one
+// bar after the 130th, at 99%). The user's decision (2026-11-06): it's taken as the last bar's end, which
+// is otherwise estimated. Returns true when: the count is one more than the played bars; every bar's tempo
+// from the points is plausible (50-200% of the median, the verifier's "bad point" limit), and the last bar
+// comes out within 80-125% of the median. Nothing is stretched: every bar keeps the video's own points.
+//   quarters[k]: written length in quarter notes of played bar k
+export function lastPointEnds(points, quarters) {
+  if (points.length !== quarters.length + 1 || quarters.length < 4 || backwardsAt({ points }) !== null) return false;
+  const median = (xs) => { const a = [...xs].sort((x, y) => x - y); return a.length % 2 ? a[a.length >> 1] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2; };
+  const spq = quarters.map((q, k) => (points[k + 1] - points[k]) / q);
+  if (spq.some((x) => !(x > 0))) return false;
+  const m = median(spq);
+  const last = spq.at(-1) / m;
+  return last >= 0.8 && last <= 1.25 && spq.every((x) => x / m >= 0.5 && x / m <= 2);
+}
+
 // The videos with their fit; a video with one stray point (findStrayPoint) fits with that point left
-// out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }.
-// With { played }, a video a few bars short at the end (untimedEnd) fits with points added for them:
+// out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }; one
+// whose extra point ends the last bar (lastPointEnds) fits with it apart: { ...video, points (without it),
+// fit: "played", endPoint: its time }. With { played }, a video a few bars short at the end (untimedEnd) fits with points added for them:
 // { ...video, points (with them), fit: "played", untimedEnd: how many }.
 export function fitVideos(videos, quarters, writtenCount, { played = null } = {}) {
   return videos.map((v) => {
@@ -156,6 +175,7 @@ export function fitVideos(videos, quarters, writtenCount, { played = null } = {}
     if (fit || backwardsAt(v) !== null) return { ...v, fit };
     const j = findStrayPoint(v.points, quarters);
     if (j !== null) return { ...v, points: v.points.filter((_, i) => i !== j), fit: "played", strayPoint: j };
+    if (lastPointEnds(v.points, quarters)) return { ...v, points: v.points.slice(0, -1), fit: "played", endPoint: v.points.at(-1) };
     const longer = untimedEnd(v.points, quarters, played);
     if (longer) return { ...v, points: longer, fit: "played", untimedEnd: longer.length - v.points.length };
     return { ...v, fit: null };
@@ -172,6 +192,7 @@ export function describeVideos(videos, playedCount, writtenCount) {
     fit: fitOf(v, playedCount, writtenCount),
     strayPoint: v.strayPoint ?? null,
     untimedEnd: v.untimedEnd ?? null,
+    endPoint: v.endPoint ?? null,
     backwardsAt: backwardsAt(v),
   }));
 }
@@ -210,7 +231,8 @@ export function chooseVideo(videos, want, playedCount, writtenCount) {
 // Flat sync points (alphaTab's applyFlatSyncPoints format) for a video, plus the numbers the report and
 // the checks need. offsetMs shifts every point (an audio source's measured offset).
 //   barQuarters(i): written length of bar i in quarter notes
-export function syncFromPoints(points, played, barQuarters, { writtenCount, offsetMs = 0 } = {}) {
+//   endSeconds: where the last played bar ends, when the video says (lastPointEnds); else estimated
+export function syncFromPoints(points, played, barQuarters, { writtenCount, offsetMs = 0, endSeconds = null } = {}) {
   let pairs;
   if (points.length === played.length) {
     pairs = played.map((p, k) => ({ ...p, t: points[k] }));
@@ -226,7 +248,9 @@ export function syncFromPoints(points, played, barQuarters, { writtenCount, offs
   // the last played bar has no end point: give it its written length at the previous bar's audio tempo
   const last = pairs[pairs.length - 1];
   let end;
-  if (pairs.length >= 2) {
+  if (endSeconds != null && endSeconds > last.t) {
+    end = endSeconds;
+  } else if (pairs.length >= 2) {
     const prev = pairs[pairs.length - 2];
     const secPerQuarter = (last.t - prev.t) / barQuarters(prev.bar);
     end = last.t + barQuarters(last.bar) * secPerQuarter;

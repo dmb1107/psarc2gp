@@ -108,6 +108,18 @@ changes.
    no repeat or alternate ending, are played once each at the end, and a video then has one point per
    played bar (`emptyTail` in sync.js; inspectSongsterr loads every track with notes to decide). Checked:
    verify-songsterr finds every note of all five tracks, 81 sync points, every video at 100%.
+   **One point too many, at the end.** Nobody Speak (s687923, revision 10051637): 130 bars at 160 bpm, no
+   repeats, three 3/4 bars; Songsterr's video, an alternative (0.05 s later) and a backing video have 131
+   points. One per bar they keep within 15% of the tab's tempo on every bar but the first (79%: the video
+   starts a moment into it), the 3/4 bars included, and the 131st comes one bar after the 130th (99%): it
+   marks where the last bar ends. findStrayPoint refuses it (no bar is split). **Handled (the user's
+   decision, 2026-11-06):** a video with exactly one point more than the played bars fits when every bar's
+   tempo from the points is plausible (50-200% of the median) and the last bar comes out within 80-125%;
+   the last point becomes the last bar's end, which is otherwise estimated (`lastPointEnds` in sync.js;
+   the form says "its last point marks the end", the conversion warns). Same risk as below: an older
+   revision with one more bar in the middle would look the same; here the 3/4 bars line up. Checked:
+   verify-songsterr finds every note of all nine tracks, all three videos at 100%, one uneven bar (bar 1);
+   the other saved songs verify exactly as before.
    **Timings that stop a few bars early.** Money (s476662, revision 9740688): 97 bars at a steady 102 bpm,
    no repeats, notes to bar 97 (a drums and synth outro after the other tracks stop at bar 93-94); all 34
    videos have 95 points, following the tab's tempo to bar 95. **Handled (the user's decision,

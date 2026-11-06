@@ -67,9 +67,10 @@ test/               node:test; samples.test.js uses real charts from .samples/
 - **Sync accuracy comes first.** Every chart beat gets a sync point. Don't trade that for notation
   convenience. Measure with `tools/verify.js`. For Songsterr: every played bar gets a sync point from the
   chosen video's own points (Songsterr times bars, not beats), never stretched to fit; a video whose
-  count doesn't fit isn't used (the three exceptions the user chose: one stray point and empty bars at the
-  end leave a point or rests out; timings that stop up to 4 bars before the end let those bars follow at
-  the closing tempo, as a last resort; none stretches: SONGSTERR.md finding 3). Rest bars after the tab,
+  count doesn't fit isn't used (the four exceptions the user chose: one stray point and empty bars at the
+  end leave a point or rests out; one point too many that ends the last bar becomes its end; timings
+  that stop up to 4 bars before the end let those bars follow at the closing tempo, as a last resort;
+  none stretches: SONGSTERR.md finding 3). Rest bars after the tab,
   timed at the closing tempo, carry a recording that outlasts the tab to its end (PRODUCT.md 24). Measure with `tools/verify-songsterr.js`.
 - **Never call Songsterr's API ourselves** or work around its bot filter. Its data comes from the
   bookmarklet in the user's browser (page state, browser cache) or a saved bundle; its CDN is fine.
