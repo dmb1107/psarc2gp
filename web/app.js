@@ -231,6 +231,7 @@ async function finish(item, result) {
       await putSong(item.song, item.gp);
       item.state = "done";
       refreshLibrary();
+      autoDownload(item);
     }
   } catch (err) {
     item.state = "error";
@@ -252,6 +253,17 @@ async function replace(item) {
   item.state = "replaced";
   renderQueue();
   refreshLibrary();
+  autoDownload(item);
+}
+
+// "Download each song when it's converted" (on unless the user turned it off): the .gp goes to the
+// browser's downloads as soon as it's in the library. A song already in the library waits for Replace.
+// Browsers ask once per site before allowing several downloads in a row.
+const autoBox = $("auto-download");
+autoBox.checked = prefs.get("autoDownload") !== "off";
+autoBox.addEventListener("change", () => prefs.set("autoDownload", autoBox.checked ? "on" : "off"));
+function autoDownload(item) {
+  if (autoBox.checked) download(item.gp, item.song.name);
 }
 
 // When the audio services can't deliver a video: other ways to get its audio. The file has to be of this

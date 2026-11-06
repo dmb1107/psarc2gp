@@ -97,6 +97,7 @@ svg { fill: currentColor; }
 
 ul { list-style: none; margin: 0 auto; padding: 0; }
 
+.auto-download { font-size: 13px; color: var(--muted); }
 #queue li {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px;
