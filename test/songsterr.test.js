@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import * as alphaTab from "../node_modules/@coderline/alphatab/dist/alphaTab.core.mjs";
 import { validateBundle, loadTracks, defaultTrackIndices, convertibleTrackIndices, trackUrl, songsterrLink } from "../src/songsterr/bundle.js";
 import { buildAlphaTex, DRUM_ARTICULATIONS, lyricChunks, placeLyrics } from "../src/songsterr/score.js";
-import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil } from "../src/songsterr/sync.js";
+import { playedBars, chooseVideo, syncFromPoints, findStrayPoint, fitVideos, describeVideos, emptyTail, restBarsUntil, untimedEnd } from "../src/songsterr/sync.js";
 import { convertSongsterr, inspectSongsterr, songsterrOutputName } from "../src/songsterr/convert.js";
 import { detectFormat, mp3Info, m4aInfo, audioInfo, mp3SoundEnd } from "../src/songsterr/audio/duration.js";
 
@@ -218,6 +218,39 @@ test("a video whose points go backwards is never used (nor repaired); the song's
   assert.equal(chooseVideo(described, "default", 9, 9).videoId, "ok");
   assert.throws(() => chooseVideo(described, "typo", 9, 9), /go backwards at point 7/);
   assert.throws(() => chooseVideo(described, "backing", 9, 9), /no "backing" video fits/);
+});
+
+test("timings that stop a few bars before the end: those bars follow at the closing tempo; anything less clear is refused", () => {
+  // Money (s476662): 97 bars at 102 bpm, every video 95 points
+  const quarters = Array(12).fill(4);
+  const played = quarters.map((_, bar) => ({ bar, occurrence: 0 }));
+  const ten = evenPoints(10, 2, 0.5); // bars 1-10 at 2 s each
+  const out = untimedEnd(ten, quarters, played);
+  assert.deepEqual(out.slice(0, 10), ten, "the video's points are kept as they are");
+  assert.deepEqual(out.slice(10).map((t) => +t.toFixed(6)), [20.5, 22.5]);
+  // without the played bars (not asked for), too many missing, or a wobbly tempo: refused
+  assert.equal(untimedEnd(ten, quarters, null), null);
+  assert.equal(untimedEnd(evenPoints(10, 2, 0.5), Array(15).fill(4), Array(15).fill(0).map((_, bar) => ({ bar, occurrence: 0 }))), null);
+  const wobbly = [...ten.slice(0, 5), ten[5] + 3, ...ten.slice(6)].map((t, i) => (i > 5 ? t + 3 : t));
+  assert.equal(untimedEnd(wobbly, quarters, played), null);
+  // the untimed bars repeat (played twice): refused
+  const repeated = [...played.slice(0, 10), { bar: 10, occurrence: 0 }, { bar: 10, occurrence: 1 }];
+  assert.equal(untimedEnd(ten, quarters, repeated), null);
+  // fitVideos marks it only when asked; the description and chooseVideo carry it
+  assert.equal(fitVideos([video(ten, { videoId: "short" })], quarters, 12)[0].fit, null);
+  const vids = fitVideos([video(ten, { videoId: "short" })], quarters, 12, { played });
+  assert.deepEqual([vids[0].fit, vids[0].untimedEnd, vids[0].points.length], ["played", 2, 12]);
+  assert.equal(describeVideos(vids, 12, 12)[0].untimedEnd, 2);
+  assert.equal(chooseVideo(describeVideos(vids, 12, 12), "default", 12, 12).videoId, "short");
+});
+
+test("convert: a video two bars short at the end syncs every bar, the last two at the closing tempo, with a warning", async () => {
+  const bars = Array.from({ length: 10 }, () => restBar());
+  const b = bundle([track(bars)], [video(evenPoints(8, 2, 0), { videoId: "short" })]);
+  const r = await convertSongsterr(b, {});
+  assert.equal(r.report.syncPoints, 11); // 10 bars + the end point
+  assert.equal(r.report.video.untimedEnd, 2);
+  assert.ok(r.report.warnings.some((w) => /stop 2 bars before the end of the tab: played bars 9-10 follow/.test(w)), r.report.warnings.join("; "));
 });
 
 test("a stray point that splits one bar is left out; anything less clear is refused", () => {

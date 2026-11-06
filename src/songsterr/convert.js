@@ -23,12 +23,13 @@ function loadScore(tex) {
 
 // The tab built as a score, its played bars, and the videos with their fit (stray points left out:
 // sync.js fitVideos).
-function structureOf(bundle, tracks, warn) {
+// untimedEnd: also fit videos a few bars short at the end (sync.js untimedEnd; a last resort).
+function structureOf(bundle, tracks, warn, { untimedEnd = false } = {}) {
   const built = buildAlphaTex(bundle, tracks, { warn });
   const { score, settings } = loadScore(built.tex);
   const played = playedBars(alphaTab, score, settings);
   const quarters = played.map((p) => score.masterBars[p.bar].calculateDuration() / QUARTER_TICKS);
-  return { built, score, settings, played, fitted: fitVideos(bundle.videos, quarters, score.masterBars.length) };
+  return { built, score, settings, played, fitted: fitVideos(bundle.videos, quarters, score.masterBars.length, { played: untimedEnd ? played : null }) };
 }
 
 // The structure step on its own (no audio): played bars and the videos that fit. Used to list videos
@@ -52,6 +53,11 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
       r = structure(kept);
     }
   }
+  // still none: maybe the videos' timings stop a few bars before the end of the tab (sync.js untimedEnd)
+  if (!r.fitted.some((v) => v.fit)) {
+    const u = structureOf(bundle, kept, warn, { untimedEnd: true });
+    if (u.fitted.some((v) => v.fit)) r = u;
+  }
   const { built, score, settings, played, fitted } = r;
   // data: the tabs as loaded (the web app keeps them); kept: what the score is built from
   return { data, kept, emptyBarsLeftOut, built, score, settings, played, fitted, videos: describeVideos(fitted, played.length, score.masterBars.length) };
@@ -68,7 +74,8 @@ export async function inspectSongsterr(bundle, { tracks = null, fetch, warn = ()
 //   fetch      for tracks the bundle doesn't carry (CDN)
 export async function convertSongsterr(bundle, { tracks = null, video = "default", audio = null, rse = true, mute = true, fetch, onWarning = () => {} } = {}) {
   const warnings = [];
-  const warn = (m) => { warnings.push(m); onWarning(m); };
+  // the tab is built again when bars are left out or added: say each thing once
+  const warn = (m) => { if (warnings.includes(m)) return; warnings.push(m); onWarning(m); };
   const inspected = await inspectSongsterr(bundle, { tracks, fetch, warn });
   let { built, score, settings, played } = inspected;
   const { fitted, emptyBarsLeftOut, kept } = inspected;
@@ -85,6 +92,10 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
   if (chosen?.strayPoint != null) {
     const k = chosen.strayPoint - 1; // the played bar it fell in
     warn(`video ${chosen.videoId} has one sync point more than the tab has played bars: point ${chosen.strayPoint + 1} splits played bar ${k + 1} (written bar ${played[k].bar + 1}) in two and was left out`);
+  }
+  if (chosen?.untimedEnd) {
+    const n = chosen.untimedEnd;
+    warn(`video ${chosen.videoId}'s timings stop ${n} bar${n === 1 ? "" : "s"} before the end of the tab: played bar${n === 1 ? "" : "s"} ${played.length - n + 1}${n === 1 ? "" : `-${played.length}`} follow at the song's closing tempo`);
   }
   if (chosen && chosen.points.length !== played.length) warn(`video ${chosen.videoId} has one point per written bar, not per played bar: repeats are timed from the first pass`);
   if (typeof audio === "function") audio = await audio({ videoId: chosen.videoId, feature: chosen.feature ?? "default", lastPoint: chosen.points.at(-1) });
@@ -149,7 +160,7 @@ export async function convertSongsterr(bundle, { tracks = null, video = "default
       emptyBarsLeftOut,
       restBarsAdded,
       syncPoints: sync?.flat.length ?? 0,
-      video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null },
+      video: chosen && { videoId: chosen.videoId, feature: chosen.feature ?? "default", firstPoint: sync.startSeconds, end: sync.endSeconds, strayPoint: chosen.strayPoint ?? null, untimedEnd: chosen.untimedEnd ?? null },
       audioSeconds: audio?.seconds ?? null,
       audioProvider: audio?.provider ?? null,
       tracks: built.tracks.map((t) => ({ ...t, soundName: rse ? SOUNDS[t.sound].label : `MIDI program ${SOUNDS[t.sound].program}` })),

@@ -108,6 +108,18 @@ changes.
    no repeat or alternate ending, are played once each at the end, and a video then has one point per
    played bar (`emptyTail` in sync.js; inspectSongsterr loads every track with notes to decide). Checked:
    verify-songsterr finds every note of all five tracks, 81 sync points, every video at 100%.
+   **Timings that stop a few bars early.** Money (s476662, revision 9740688): 97 bars at a steady 102 bpm,
+   no repeats, notes to bar 97 (a drums and synth outro after the other tracks stop at bar 93-94); all 34
+   videos have 95 points, following the tab's tempo to bar 95. **Handled (the user's decision,
+   2026-11-06):** when no video fits otherwise (not even after emptyTail), a video with at most 4 points
+   fewer than the played bars fits if those bars are the tab's last written bars, played once each at the
+   end, and every timed bar's tempo is plausible (50-200% of the median); points are added for them at the
+   closing tempo (median of the last eight timed bars), as for the rest bars after a tab (`untimedEnd` in
+   sync.js; the form says "last 2 bars at the closing tempo", the conversion warns). The timed bars keep
+   the video's points. It can't prove the missing bars are the last ones (an older revision with bars
+   missing in the middle would look the same), which is why it's a last resort. Checked: verify-songsterr
+   finds every note of all eight tracks, the default and backing videos at 101% with no uneven bar; the
+   other saved songs verify exactly as before.
    **The recording outlasts the tab** (same song): the tab is synced to 148 s of a 308 s recording, and
    Guitar Pro stopped at the score's end. Since 2026-11-05 rest bars follow until the recording ends, at
    the closing tempo (`restBarsUntil`; PRODUCT.md decision 24), up to where the sound ends: the video

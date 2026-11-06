@@ -564,6 +564,7 @@ function renderVideos() {
     if (!everywhere(v)) parts.push(v.countries.length <= 3 ? `only in ${v.countries.join(", ")}` : `only in ${v.countries.length} countries`);
     if (v.fit === "written") parts.push("repeats timed from their first pass");
     if (v.strayPoint != null) parts.push("one stray sync point left out");
+    if (v.untimedEnd) parts.push(`last ${v.untimedEnd === 1 ? "bar" : `${v.untimedEnd} bars`} at the closing tempo`);
     return el("option", { value: v.videoId, textContent: `${parts.join(", ")} (${v.videoId})`, selected: v.videoId === preferred });
   }));
   select.disabled = !usable.length;

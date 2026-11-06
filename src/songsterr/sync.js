@@ -114,15 +114,51 @@ export function restBarsUntil(points, played, barQuarters, lastEnd, audioEnd) {
   return Array.from({ length: Math.max(count, 0) }, (_, i) => lastEnd + i * barSec);
 }
 
+// A few bars short at the end: Songsterr's timings can stop before the tab's last bars, which still have
+// notes (Money, s476662, revision 9740688: 97 bars at a steady 102 bpm, notes to bar 97 on the drums; all
+// 34 videos have 95 points, following the tab's tempo to bar 95). The user's decision (2026-11-06): those
+// bars follow at the song's closing tempo, as the rest bars after a tab do (restBarsUntil). Returns the
+// points with one added per untimed bar, or null. Only when: at most MAX_UNTIMED_END bars lack a point;
+// they are the tab's last written bars, each played once at the very end (no repeat reaches them); and
+// every timed bar's tempo is plausible (50-200% of the median, the verifier's "bad point" limit). The
+// timed bars keep the video's points; nothing is stretched. It can't prove the missing bars are the last
+// ones (a revision that added bars in the middle would look the same), hence a last resort: only when no
+// video fits otherwise (inspectSongsterr), and always with a warning.
+//   quarters[k]: written length in quarter notes of played bar k; played: playback order
+export const MAX_UNTIMED_END = 4;
+export function untimedEnd(points, quarters, played) {
+  const n = points.length;
+  const missing = quarters.length - n;
+  if (!played || missing < 1 || missing > MAX_UNTIMED_END || n < 8 || backwardsAt({ points }) !== null) return null;
+  const written = Math.max(...played.map((p) => p.bar)) + 1;
+  const first = written - missing;
+  if (played.slice(-missing).some((p, k) => p.bar !== first + k || p.occurrence !== 0)) return null;
+  if (played.slice(0, -missing).some((p) => p.bar >= first)) return null;
+  const median = (xs) => { const a = [...xs].sort((x, y) => x - y); return a.length % 2 ? a[a.length >> 1] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2; };
+  const spq = quarters.slice(0, n - 1).map((q, k) => (points[k + 1] - points[k]) / q);
+  if (spq.some((x) => !(x > 0))) return null;
+  const m = median(spq);
+  if (!spq.every((x) => x / m >= 0.5 && x / m <= 2)) return null;
+  // the closing tempo: the median of the last eight timed bars
+  const closing = median(spq.slice(-8));
+  const out = [...points];
+  for (let k = n; k < quarters.length; k++) out.push(out[k - 1] + quarters[k - 1] * closing);
+  return out;
+}
+
 // The videos with their fit; a video with one stray point (findStrayPoint) fits with that point left
 // out: { ...video, points (without it), fit: "played", strayPoint: its index in the original list }.
-export function fitVideos(videos, quarters, writtenCount) {
+// With { played }, a video a few bars short at the end (untimedEnd) fits with points added for them:
+// { ...video, points (with them), fit: "played", untimedEnd: how many }.
+export function fitVideos(videos, quarters, writtenCount, { played = null } = {}) {
   return videos.map((v) => {
     const fit = fitOf(v, quarters.length, writtenCount);
     if (fit || backwardsAt(v) !== null) return { ...v, fit };
     const j = findStrayPoint(v.points, quarters);
-    if (j === null) return { ...v, fit: null };
-    return { ...v, points: v.points.filter((_, i) => i !== j), fit: "played", strayPoint: j };
+    if (j !== null) return { ...v, points: v.points.filter((_, i) => i !== j), fit: "played", strayPoint: j };
+    const longer = untimedEnd(v.points, quarters, played);
+    if (longer) return { ...v, points: longer, fit: "played", untimedEnd: longer.length - v.points.length };
+    return { ...v, fit: null };
   });
 }
 
@@ -135,6 +171,7 @@ export function describeVideos(videos, playedCount, writtenCount) {
     points: pointCount(v),
     fit: fitOf(v, playedCount, writtenCount),
     strayPoint: v.strayPoint ?? null,
+    untimedEnd: v.untimedEnd ?? null,
     backwardsAt: backwardsAt(v),
   }));
 }
