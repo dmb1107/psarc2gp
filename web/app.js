@@ -244,7 +244,37 @@ async function finish(item, result) {
   }
   if (item.job) delete item.job.secrets; // not kept around once used
   renderQueue();
+  item.onFinished?.(item);
   pump();
+}
+
+// ------------------------------------------------------------------------- moving to a newer tab
+// When the bookmark opens a newer tab2gp tab, this tab's queue moves there (songsterr.js, "one tab for
+// many songs"). The song being converted stays here until it's finished (its audio may already have been
+// fetched), shown there as converting in another tab; then its result follows. Items are copied
+// (structured clone: Files and Blobs included).
+const portable = ({ onFinished, ...item }) => item;
+function giveQueue(tabId) {
+  const working = busy;
+  const items = queue.map((q) => (q === working ? { ...portable(q), state: "elsewhere", ref: `${tabId}:${q.id}` } : portable(q)));
+  queue.length = 0;
+  if (working) queue.push(working);
+  renderQueue();
+  return { items, working: working && new Promise((resolve) => { working.onFinished = (q) => resolve({ ref: `${tabId}:${q.id}`, item: portable(q) }); }) };
+}
+function takeQueue(items) {
+  for (const item of items) queue.push({ ...item, id: nextId++ });
+  renderQueue();
+  refreshLibrary();
+  pump();
+}
+// the result of a song that was converting in another tab
+function finishedElsewhere(ref, item) {
+  const q = queue.find((x) => x.state === "elsewhere" && x.ref === ref);
+  if (!q) return;
+  Object.assign(q, item, { id: q.id, ref: undefined });
+  renderQueue();
+  refreshLibrary();
 }
 
 async function replace(item) {
@@ -296,6 +326,7 @@ function renderQueue() {
     const save = () => button("Download", () => download(item.gp, item.song.name));
     switch (item.state) {
       case "waiting": state("Waiting"); break;
+      case "elsewhere": li.append(el("span", { className: "spinner" })); state("Converting in your older tab2gp tab…"); break;
       case "working": li.append(el("span", { className: "spinner" })); state(item.kind === "gp" ? "Adding…" : progressText(item.progress)); break;
       case "done": state("Added to the library", "done"); play(); save(); break;
       case "exists": state(`Already in your library${versions(item)}`); button("Replace it", () => replace(item)); save(); break;
@@ -461,8 +492,7 @@ function onAddress() {
   takeInviteFromAddress()?.then(notify);
   route();
 }
-// idle: a tab the bookmarklet opened passes its song on to an open tab2gp tab only while it has nothing to do
-initSongsterrPage({ ask, enqueue: enqueueSongsterr, idle: () => !queue.length, notify });
+initSongsterrPage({ ask, enqueue: enqueueSongsterr, notify, giveQueue, takeQueue, finishedElsewhere });
 window.addEventListener("hashchange", onAddress);
 refreshLibrary();
 onAddress();

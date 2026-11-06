@@ -205,17 +205,21 @@ an older bookmarklet reuses an app tab that is already open (window name `psarc2
 isn't reset.
 
 One tab for many songs (2026-11-05, the user's request: a dozen songs from a dozen Songsterr tabs should
-land in one or two tab2gp tabs). Each click now opens a new tab (`_blank`). If another tab2gp tab is open,
-the new one (when it has no songs and an empty queue) posts the song on the `psarc2gp-tabs`
-BroadcastChannel; the oldest open tab, which holds the `psarc2gp-main` Web Lock, answers `taken`, and the
-new tab confirms to the bookmarklet and closes itself, so the browser goes back to the Songsterr tab. No
-answer within 2 s (a background tab the browser froze): the new tab keeps the song, and the main tab
-ignores a message older than that when it wakes. The Songsterr page holds a list of the songs waiting
-(each keeps its own track and video picks; "Convert all" converts the ready ones with the audio fetched),
-and a song arriving while the player is open waits without stopping it. Why not reuse a named window:
-`window.open` with a name finds only windows in the same browsing context group (tabs opened with an
-opener), brings that tab to the front, and reloads it when the address differs, losing its queue.
-"Save the song as a file" fetches every track from the CDN on click; the web app and the CLI both
+land in one or two tab2gp tabs, and each click should end on tab2gp). Each click opens a new tab
+(`_blank`), which is in front. When its song arrives it posts `takeover` on the `psarc2gp-tabs`
+BroadcastChannel; every older tab2gp tab answers with a `handover` addressed to it (waiting songs with
+their inspection and picks, the conversion queue, Files and Blobs included) and closes itself. The song
+being converted finishes in the old tab and its result follows (`finished`, by ref); the new tab shows
+it as converting in the older tab meanwhile. A tab playing a song hands over but stays; a tab the user
+opened by hand can't close itself and says so; a tab that has handed over passes on handovers still
+addressed to it, and waits 1.5 s before closing. The first version did the reverse (the new tab passed
+its song to the oldest tab, which held a Web Lock, and closed): one tab, but each click ended back on
+Songsterr, which the user didn't want. Why not reuse a named window: `window.open` with a name finds
+only windows in the same browsing context group (tabs opened with an opener), and reloads that tab when
+the address differs, losing its queue. The Songsterr page holds a list of the songs waiting (each keeps
+its own picks; "Convert all" converts the ready ones with the audio fetched).
+"Save the song as a file" (offered only when the handoff fails: a blocked tab, or no answer) fetches every
+track from the CDN on click; the web app and the CLI both
 open the file.
 
 ### 2. Converter core: `src/songsterr/` (platform-neutral, like the rest of `src/`)

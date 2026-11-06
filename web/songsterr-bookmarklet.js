@@ -11,9 +11,9 @@
    Handoff: the app tab may still be loading, and window.opener may not survive, so this side says
    "hello" every 250 ms; the app answers "ready" to whoever said it (from www.songsterr.com only), gets
    the song, and confirms with "received". Messages are sent to the app's origin only.
-   Every click opens a new tab: when a tab2gp tab is already open, the new one passes the song to it and
-   closes (web/songsterr.js, "one tab for many songs"), so the browser comes back to this tab. A named
-   window would be brought to the front instead, and reloaded when its address differs. */
+   Every click opens a new tab, in front: it gathers the songs and conversions of any older tab2gp tab,
+   which closes (web/songsterr.js, "one tab for many songs"). A named window would be found only from
+   tabs related to the one that opened it, and reloaded when its address differs. */
 (() => {
   const APP = "__APP__";
   const PASSWORD = "__PASSWORD__";
@@ -114,7 +114,7 @@
     if (!win || e.source !== win || e.origin !== origin || !e.data) return;
     if (e.data.type === "psarc2gp-ready") { ready = true; clearInterval(hello); send(); }
     if (e.data.type === "psarc2gp-received") {
-      status.textContent = "Sent to tab2gp: it waits there with the other songs you send.";
+      status.textContent = "Sent to tab2gp.";
       status.style.color = "#9fe0a0";
       setTimeout(() => panel.remove(), 8000);
     }

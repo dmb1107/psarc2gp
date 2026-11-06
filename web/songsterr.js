@@ -148,7 +148,8 @@ const FEATURE = {
 
 let ask = null; // (message, transfer, onProgress) → worker answer
 let enqueue = null; // (job, { show }) → adds a Songsterr song to the conversion queue (show: go to the library)
-let idle = () => true; // () → nothing in this tab's conversion queue
+// giveQueue/takeQueue/finishedElsewhere: this tab's conversion queue moving between tabs (app.js)
+let tabHooks = { giveQueue: () => ({ items: [], working: null }), takeQueue() {}, finishedElsewhere() {} };
 let notify = () => {}; // (text) → the app's notice line
 // The songs on this page, in arrival order, each { bundle, from, info, error, inspecting, picks, video }
 // (picks and video: the user's choices, kept while another song is shown). `current` is the one in the form.
@@ -158,11 +159,11 @@ let receiving = false; // a bookmarklet said hello; its song is on the way
 let fileError = null; // a picked or dropped file that isn't a song
 let tracksShownFor = null; // the track list is built once per song, so re-renders keep the user's picks
 
-// ask/enqueue/idle/notify come from app.js (the worker and the queue live there)
+// ask/enqueue/notify and the queue hooks come from app.js (the worker and the queue live there)
 export function initSongsterrPage(options) {
   ({ ask, enqueue } = options);
-  idle = options.idle ?? idle;
   notify = options.notify ?? notify;
+  for (const k of Object.keys(tabHooks)) if (options[k]) tabHooks[k] = options[k];
   joinTabs();
   listeners.add(renderKey);
   listeners.add(renderQuota);
@@ -277,53 +278,78 @@ async function renderBookmarklet() {
 }
 
 // ------------------------------------------------------------------------- songs from Songsterr
-// One tab for many songs: every click on the bookmark opens a tab2gp tab. When another tab2gp tab is
-// already open, the new one hands the song to it and closes itself, so a dozen songs end up on one page.
-// The tab that takes songs is the oldest open one (it holds the MAIN_LOCK Web Lock; the next one in line
-// takes over when it closes). A main tab that doesn't answer within HANDOVER_MS (frozen by the browser in
-// the background) is passed over: the new tab keeps the song, and the late main tab ignores it.
+// One tab for many songs, and it's the one in front: every click on the bookmark opens a tab2gp tab (a
+// page can't bring another tab to the front, but the tab the bookmark opens is in front already). When
+// that tab gets its song it says "takeover" on TABS_CHANNEL, and every older tab2gp tab hands it its
+// waiting songs and its conversion queue ("handover"), then closes itself (allowed for a tab a script
+// opened; one the user opened stays, emptied, and says so). A song being converted stays in the old tab
+// until it's finished (its audio may already have been fetched) and its result follows ("finished",
+// matched by ref). An old tab playing a song in the player hands everything over but stays open.
+// A tab that has handed over passes on any handover still addressed to it.
 const TABS_CHANNEL = "psarc2gp-tabs";
-const MAIN_LOCK = "psarc2gp-main";
-export const HANDOVER_MS = 2000;
+const CLOSE_AFTER_MS = 1500; // a closing tab waits this long for handovers still on their way to it
 let channel = null;
-let isMain = true;
-let mainKnown = Promise.resolve();
-let openedByBookmark = false; // this tab was opened by the bookmarklet (and may close itself)
+let tabId = null;
+let successor = null; // the newer tab this one handed over to
 
 function joinTabs() {
-  openedByBookmark = !!window.opener && location.hash === "#/songsterr";
-  if (typeof BroadcastChannel !== "function" || !navigator.locks) return; // every tab keeps its own songs
+  if (typeof BroadcastChannel !== "function") return; // every tab keeps its own songs
+  tabId = crypto.randomUUID();
   channel = new BroadcastChannel(TABS_CHANNEL);
   channel.addEventListener("message", onTabMessage);
-  const hold = () => new Promise(() => {}); // held until the tab closes
-  mainKnown = new Promise((known) => {
-    navigator.locks.request(MAIN_LOCK, { ifAvailable: true }, (lock) => {
-      isMain = !!lock;
-      known();
-      if (lock) return hold();
-      navigator.locks.request(MAIN_LOCK, () => { isMain = true; renderSong(); return hold(); });
-      return null;
-    }).catch(() => { isMain = true; known(); });
-  });
 }
 
 function onTabMessage({ data }) {
-  if (!isMain || data?.type !== "song" || !(Date.now() - data.sentAt < HANDOVER_MS)) return;
-  channel.postMessage({ type: "taken", id: data.id });
-  takeSong(data.bundle, data.password, { handedOver: true });
+  if (!data || typeof data !== "object") return;
+  if (data.type === "takeover" && data.from !== tabId) { cede(data.from); return; }
+  if (data.type === "finished") { tabHooks.finishedElsewhere(data.ref, data.item); return; }
+  if (data.to !== tabId) return;
+  if (successor) { channel.postMessage({ ...data, to: successor }); return; }
+  if (data.type === "handover") receiveHandover(data);
 }
 
-// → true once the main tab has taken it
-function handOver(bundle, password) {
-  return new Promise((resolve) => {
-    const id = crypto.randomUUID();
-    const done = (taken) => { clearTimeout(timer); channel.removeEventListener("message", taken_); resolve(taken); };
-    const taken_ = ({ data }) => { if (data?.type === "taken" && data.id === id) done(true); };
-    const timer = setTimeout(() => done(false), HANDOVER_MS);
-    channel.addEventListener("message", taken_);
-    channel.postMessage({ type: "song", id, sentAt: Date.now(), bundle, password });
-  });
+function takeOver() {
+  successor = null;
+  channel?.postMessage({ type: "takeover", from: tabId });
 }
+
+// what an entry carries to another tab (its inspection too, so it isn't read again)
+const portableSong = ({ bundle, from, info, error, picks, video }) => ({ bundle, from, info, error, picks, video });
+
+async function cede(to) {
+  successor = to;
+  const moving = songs.splice(0).map(portableSong);
+  current = null;
+  receiving = false;
+  const { items, working } = tabHooks.giveQueue(tabId);
+  channel.postMessage({ type: "handover", from: tabId, to, songs: moving, queue: items });
+  renderSong();
+  const playing = location.hash.startsWith("#/play/");
+  if (moving.length || items.length) notify("Your songs and conversions moved to the newer tab2gp tab.");
+  if (working) {
+    const { ref, item } = await working;
+    channel.postMessage({ type: "finished", ref, item });
+  }
+  if (playing || successor !== to) return; // playing a song here; or this tab took over again since
+  setTimeout(() => {
+    if (successor !== to || location.hash.startsWith("#/play/")) return;
+    window.close();
+    notify("Your songs moved to the newer tab2gp tab: you can close this one.");
+  }, CLOSE_AFTER_MS);
+}
+
+function receiveHandover({ songs: moving = [], queue: items = [] }) {
+  const fresh = moving.filter((m) => !songs.some((s) => sameSong(s.bundle, m.bundle)));
+  // older songs first; the form keeps the one just sent
+  const added = fresh.map((m) => ({ ...m, inspecting: !m.info && !m.error }));
+  songs.unshift(...added);
+  for (const s of added) if (s.inspecting) inspect(s);
+  if (!current && songs.length) current = songs[0];
+  if (items.length) tabHooks.takeQueue(items);
+  renderSong();
+}
+
+const sameSong = (a, b) => a.song.songId === b.song.songId && a.song.revisionId === b.song.revisionId;
 
 async function onMessage(e) {
   if (e.origin !== SONGSTERR_ORIGIN || !e.data || typeof e.data !== "object") return;
@@ -334,32 +360,15 @@ async function onMessage(e) {
     return;
   }
   if (e.data.type !== "psarc2gp-song") return;
-  const { bundle, password: pw } = e.data;
-  await mainKnown;
-  // only a tab that has nothing else to do passes songs on (one the user works in keeps what it's sent)
-  if (!isMain && channel && openedByBookmark && !songs.length && idle() && await handOver(bundle, pw)) {
-    reply({ type: "psarc2gp-received" });
-    receiving = false;
-    window.close(); // allowed: the bookmarklet opened this tab
-    // still open (the browser kept it)
-    $("ss-notice").textContent = `Sent ${songName(bundle)} to the tab2gp tab that was already open. You can close this one.`;
-    renderSong();
-    return;
-  }
   reply({ type: "psarc2gp-received" });
-  takeSong(bundle, pw);
-}
-
-function takeSong(bundle, pw, { handedOver = false } = {}) {
+  const pw = e.data.password;
   if (typeof pw === "string" && pw && pw !== currentPassword()) {
     unlock(pw).catch((err) => {
       if (err.code === "password") $("ss-notice").textContent = "The bookmark's password no longer opens the shared audio key: unlock with the new one on the Setup page, then drag the button again.";
     });
   }
-  // a song handed over from another tab doesn't stop the song playing here
-  const show = !(handedOver && location.hash.startsWith("#/play/"));
-  if (!show) notify(`${songName(bundle)} from Songsterr is waiting on the Songsterr page (Songs waiting, at the top).`);
-  openBundle(bundle, "bookmarklet", { show, select: !handedOver });
+  takeOver(); // the tab the bookmark brought to the front gathers every song
+  openBundle(e.data.bundle, "bookmarklet");
 }
 
 const songName = (bundle) => {
@@ -390,10 +399,8 @@ export async function openSongFile(file) {
   openBundle(bundle, "file");
 }
 
-// show: go to the Songsterr page; select: show this song in the form (a song handed over from another
-// tab only when the form is empty, so it doesn't replace the one being looked at)
-async function openBundle(bundle, from, { show = true, select = true } = {}) {
-  if (show) showPage();
+async function openBundle(bundle, from) {
+  showPage();
   receiving = false;
   fileError = null;
   try {
@@ -403,19 +410,24 @@ async function openBundle(bundle, from, { show = true, select = true } = {}) {
     renderSong();
     return;
   }
-  const same = songs.find((s) => s.bundle.song.songId === bundle.song.songId && s.bundle.song.revisionId === bundle.song.revisionId);
+  const same = songs.find((s) => sameSong(s.bundle, bundle));
   if (same) {
-    if (select || !current) current = same;
+    current = same;
     renderSong();
     return;
   }
   bundle.trackData ??= bundle.song.tracks.map(() => null);
   const me = { bundle, from, info: null, inspecting: true };
   songs.push(me);
-  if (select || !current) current = me;
+  current = me;
+  inspect(me);
+}
+
+// the tracks converted by default (every one with notes): they give the played-bar count, which says
+// which videos fit, and are kept for the conversion
+async function inspect(me) {
   renderSong();
-  // the tracks converted by default (every one with notes): they give the played-bar count, which says
-  // which videos fit, and are kept for the conversion
+  const { bundle } = me;
   const pick = defaultTrackIndices(bundle);
   if (!pick.length) {
     me.error = "all of this song's tracks are empty";

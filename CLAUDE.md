@@ -203,13 +203,14 @@ Web app and browser port:
   hello, from https://www.songsterr.com only), not through `window.opener`. Claude's browser pane opens
   `window.open` in the same tab, so the cross-tab handoff can only be tried in a real browser; on the real
   Songsterr page, stub `window.open` with a same-origin iframe's window to check what it would send.
-- One tab for many songs: every bookmark click opens a new tab (`_blank`; a named window would be brought
-  to the front, and reloaded if its address differs). The new tab, if it has nothing else to do, hands
-  the song over a BroadcastChannel to the oldest open tab (holder of the `psarc2gp-main` Web Lock), which
-  answers `taken` within 2 s, then closes itself; the browser goes back to the Songsterr tab. A main tab
-  frozen in the background misses the 2 s, ignores the late message, and the new tab keeps the song. The
-  Songsterr page keeps a list of songs (Convert all fetches each one's audio). Tried with two tabs in
-  Claude's browser pane; the click from Songsterr itself only in a real browser.
+- One tab for many songs, the one in front (the user's choice): every bookmark click opens a new tab
+  (`_blank`), which the browser shows. A page can't bring another tab to the front, so instead the new
+  tab, once its song arrives, posts `takeover` on the `psarc2gp-tabs` BroadcastChannel; every older tab
+  hands it its waiting songs (with their inspection) and its conversion queue, then closes itself
+  (window.close works for tabs a script opened; one the user opened stays, emptied). A song being
+  converted finishes in the old tab (its audio may already be fetched) and its result follows as
+  `finished`, matched by ref. A tab in the player hands over but stays open. Tried with two tabs in
+  Claude's browser pane (the old one closed); the click from Songsterr itself only in a real browser.
 - `#unlock=<password>` (invite link) must be handled on hashchange too: pasted into an open app tab it's a
   fragment change, not a load. web/songsterr.js imports nothing that touches the page at load, so Node
   tests can import `buildBookmarklet`.
