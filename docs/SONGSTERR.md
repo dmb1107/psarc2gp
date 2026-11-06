@@ -201,8 +201,21 @@ browsers keep a bookmark on one line). The handoff doesn't rely on `window.opene
 `psarc2gp-hello` to the tab it opened every 250 ms (to the app's origin only), the app answers
 `psarc2gp-ready` to whoever said it (from `https://www.songsterr.com` only), receives
 `{ type: "psarc2gp-song", bundle, password }` and confirms with `psarc2gp-received`. So it also works when
-the bookmarklet reuses an app tab that is already open (window name `psarc2gp`), where the opener isn't
-reset. "Save the song as a file" fetches every track from the CDN on click; the web app and the CLI both
+an older bookmarklet reuses an app tab that is already open (window name `psarc2gp`), where the opener
+isn't reset.
+
+One tab for many songs (2026-11-05, the user's request: a dozen songs from a dozen Songsterr tabs should
+land in one or two tab2gp tabs). Each click now opens a new tab (`_blank`). If another tab2gp tab is open,
+the new one (when it has no songs and an empty queue) posts the song on the `psarc2gp-tabs`
+BroadcastChannel; the oldest open tab, which holds the `psarc2gp-main` Web Lock, answers `taken`, and the
+new tab confirms to the bookmarklet and closes itself, so the browser goes back to the Songsterr tab. No
+answer within 2 s (a background tab the browser froze): the new tab keeps the song, and the main tab
+ignores a message older than that when it wakes. The Songsterr page holds a list of the songs waiting
+(each keeps its own track and video picks; "Convert all" converts the ready ones with the audio fetched),
+and a song arriving while the player is open waits without stopping it. Why not reuse a named window:
+`window.open` with a name finds only windows in the same browsing context group (tabs opened with an
+opener), brings that tab to the front, and reloads it when the address differs, losing its queue.
+"Save the song as a file" fetches every track from the CDN on click; the web app and the CLI both
 open the file.
 
 ### 2. Converter core: `src/songsterr/` (platform-neutral, like the rest of `src/`)

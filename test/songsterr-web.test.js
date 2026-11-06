@@ -78,7 +78,7 @@ const run = async (page, password = "") => {
 test("bookmarklet: hands the song over after the app says ready, song fields only", async () => {
   const page = fakeSongsterr();
   await run(page, "secret");
-  assert.deepEqual(page.env.opened, { url: `${APP}#/songsterr`, name: "psarc2gp" });
+  assert.deepEqual(page.env.opened, { url: `${APP}#/songsterr`, name: "_blank" });
   assert.deepEqual(page.requests, [{ url: "/api/video-points/514895/5672979/list", cache: "only-if-cached" }]);
 
   page.timers[0](); // the hello timer
@@ -133,7 +133,7 @@ test("bookmarklet: a song address with the chosen track's number (…-s514895t0)
     const page = fakeSongsterr({ path });
     await run(page);
     assert.doesNotMatch(page.text(), /Open a song on/, path);
-    assert.deepEqual(page.env.opened, { url: `${APP}#/songsterr`, name: "psarc2gp" }, path);
+    assert.deepEqual(page.env.opened, { url: `${APP}#/songsterr`, name: "_blank" }, path);
   }
   const other = fakeSongsterr({ path: "/a/wsa/turnstile-underwater-boi-tab-s514895x0" });
   await run(other);

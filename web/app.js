@@ -2,7 +2,7 @@
 // Guitar Pro files, keep them in a library in this browser, and practise with them. Conversion runs on this
 // computer and nothing is uploaded; a Songsterr song's audio is fetched by video id from a conversion service.
 import { Player } from "./player.js";
-import { initSongsterrPage, openSongFile, rememberQuotas, takeInviteFromAddress } from "./songsterr.js";
+import { initSongsterrPage, openSongFile, pageTitle, rememberQuotas, takeInviteFromAddress } from "./songsterr.js";
 import { allSongs, deleteSong, getFile, getSong, isPersistent, putSong, songId, storageEstimate, updateSong } from "./library.js";
 
 const $ = (id) => document.getElementById(id);
@@ -173,14 +173,15 @@ function enqueue(files) {
   if (!known.length && !bundles.length && files.length) queue.push({ id: nextId++, label: files[0].name, state: "error", message: "not a .psarc, .gp or Songsterr song file" });
   renderQueue();
   pump();
-  if (bundles.length) openSongFile(bundles[0]); // the Songsterr page takes one song at a time
-  else if (known.length && location.hash !== "#/" && location.hash !== "") location.hash = "#/";
+  for (const b of bundles) openSongFile(b); // the Songsterr page keeps each one in its list
+  if (!bundles.length && known.length && location.hash !== "#/" && location.hash !== "") location.hash = "#/";
 }
 
-// a song from the Songsterr page: { bundle, tracks, video, audio: "fetch" | "file" | "none", file, secrets, name }
-function enqueueSongsterr(job) {
+// a song from the Songsterr page: { bundle, tracks, video, audio: "fetch" | "file" | "none", file, secrets, name };
+// show: go to the library (not while more songs wait on the Songsterr page)
+function enqueueSongsterr(job, { show = true } = {}) {
   queue.push({ id: nextId++, kind: "songsterr", label: job.name, job, state: "waiting" });
-  location.hash = "#/";
+  if (show) location.hash = "#/";
   renderQueue();
   pump();
 }
@@ -374,13 +375,14 @@ let openSong = null;
 function showView(name) {
   for (const v of ["library", "songsterr", "setup", "player"]) $(`${v}-view`).hidden = v !== name;
   $("nav-setup").setAttribute("aria-current", name === "setup" ? "page" : "false");
+  $("nav-songsterr").setAttribute("aria-current", name === "songsterr" ? "page" : "false");
 }
 
 async function route() {
   if (location.hash === "#/songsterr") {
     closePlayer();
     showView("songsterr");
-    document.title = "Songs from Songsterr · tab2gp";
+    document.title = pageTitle();
     return;
   }
   if (location.hash === "#/setup") {
@@ -447,7 +449,8 @@ function onAddress() {
   takeInviteFromAddress()?.then(notify);
   route();
 }
-initSongsterrPage({ ask, enqueue: enqueueSongsterr });
+// idle: a tab the bookmarklet opened passes its song on to an open tab2gp tab only while it has nothing to do
+initSongsterrPage({ ask, enqueue: enqueueSongsterr, idle: () => !queue.length, notify });
 window.addEventListener("hashchange", onAddress);
 refreshLibrary();
 onAddress();

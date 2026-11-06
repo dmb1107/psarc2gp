@@ -13,6 +13,7 @@
 <header class="appbar">
   <a class="brand" href="#/"><img src="icon.svg" alt="" width="22" height="22">tab2gp</a>
   <span class="tagline">Rocksmith and Songsterr songs to Guitar Pro, synced to the recording</span>
+  <a id="nav-songsterr" class="navlink" href="#/songsterr" hidden>Songs waiting</a>
   <a id="nav-setup" class="navlink" href="#/setup">Setup and help</a>
   <button id="theme" class="quiet" type="button" title="Colour theme">Theme: system</button>
 </header>
@@ -77,6 +78,12 @@
 
   <p id="ss-waiting" class="ss-box" hidden><span class="spinner"></span> Receiving the song from the Songsterr tab…</p>
   <p id="ss-error" class="ss-box error" hidden></p>
+
+  <section id="ss-songs" class="ss-box" aria-labelledby="ss-songs-title" hidden>
+    <h2 id="ss-songs-title">Songs waiting</h2>
+    <ul id="ss-songs-list" class="ss-songs"></ul>
+    <p class="ss-actions"><button id="ss-convert-all" type="button">Convert all</button> <span id="ss-songs-note" class="note"></span></p>
+  </section>
 
   <form id="ss-form" class="ss-box" hidden>
     <h2 id="ss-title"></h2>

@@ -197,7 +197,7 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 /* ---------------------------------------------------------------------------------- songsterr */
 .navlink { margin-left: auto; padding: 5px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; white-space: nowrap; }
 .navlink:hover, .navlink[aria-current="page"] { color: var(--fg); background: var(--hover); }
-.navlink + #theme { margin-left: 0; }
+.navlink + #theme, #nav-songsterr:not([hidden]) + .navlink { margin-left: 0; }
 .notice {
   margin: 0; padding: 8px 16px;
   background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-bottom: 1px solid var(--line);
@@ -208,6 +208,15 @@ ul { list-style: none; margin: 0 auto; padding: 0; }
 #ss-waiting { display: flex; align-items: center; gap: 10px; }
 #ss-waiting[hidden] { display: none; }
 #ss-byline { margin: 2px 0 6px; }
+#ss-songs h2 { margin: 0 0 8px; font-size: 15px; }
+.ss-songs { list-style: none; margin: 0; padding: 0; }
+.ss-songs li { display: flex; align-items: center; gap: 10px; padding: 3px 6px; border-radius: 6px; }
+.ss-songs li.current { background: var(--hover); }
+.ss-songs li .link { text-align: left; }
+.ss-songs li.current .link { color: var(--fg); font-weight: 600; text-decoration: none; }
+.ss-songs li .muted { font-size: 12.5px; margin-left: auto; white-space: nowrap; }
+.ss-songs li .warn { color: var(--danger); }
+.ss-songs li .quiet { padding: 0 6px; line-height: 1.4; }
 .muted, .note { color: var(--muted); }
 .note { font-size: 12.5px; margin: 4px 0 0; }
 .note:empty { display: none; }

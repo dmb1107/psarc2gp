@@ -147,13 +147,23 @@ const FEATURE = {
 };
 
 let ask = null; // (message, transfer, onProgress) → worker answer
-let enqueue = null; // (job) → adds a Songsterr song to the conversion queue
-let current = null; // { bundle, from, info, error, inspecting }
+let enqueue = null; // (job, { show }) → adds a Songsterr song to the conversion queue (show: go to the library)
+let idle = () => true; // () → nothing in this tab's conversion queue
+let notify = () => {}; // (text) → the app's notice line
+// The songs on this page, in arrival order, each { bundle, from, info, error, inspecting, picks, video }
+// (picks and video: the user's choices, kept while another song is shown). `current` is the one in the form.
+const songs = [];
+let current = null;
+let receiving = false; // a bookmarklet said hello; its song is on the way
+let fileError = null; // a picked or dropped file that isn't a song
 let tracksShownFor = null; // the track list is built once per song, so re-renders keep the user's picks
 
-// ask/enqueue come from app.js (the worker and the queue live there)
+// ask/enqueue/idle/notify come from app.js (the worker and the queue live there)
 export function initSongsterrPage(options) {
   ({ ask, enqueue } = options);
+  idle = options.idle ?? idle;
+  notify = options.notify ?? notify;
+  joinTabs();
   listeners.add(renderKey);
   listeners.add(renderQuota);
   listeners.add(renderBookmarklet);
@@ -189,8 +199,13 @@ export function initSongsterrPage(options) {
   $("ss-form").addEventListener("submit", (e) => { e.preventDefault(); convert(); });
   $("ss-form").addEventListener("change", (e) => {
     if (e.target.name === "audio" || e.target.id === "ss-audio-file") renderAudio();
-    if (e.target.name === "track") renderTracksNote();
+    if (e.target.name === "track") {
+      if (current) current.picks = checkedTracks();
+      renderTracksNote();
+    }
+    if (e.target.id === "ss-video" && current) current.video = e.target.value;
   });
+  $("ss-convert-all").addEventListener("click", convertAll);
   renderKey();
   renderQuota();
   renderBookmarklet();
@@ -262,55 +277,142 @@ async function renderBookmarklet() {
 }
 
 // ------------------------------------------------------------------------- songs from Songsterr
-function onMessage(e) {
+// One tab for many songs: every click on the bookmark opens a tab2gp tab. When another tab2gp tab is
+// already open, the new one hands the song to it and closes itself, so a dozen songs end up on one page.
+// The tab that takes songs is the oldest open one (it holds the MAIN_LOCK Web Lock; the next one in line
+// takes over when it closes). A main tab that doesn't answer within HANDOVER_MS (frozen by the browser in
+// the background) is passed over: the new tab keeps the song, and the late main tab ignores it.
+const TABS_CHANNEL = "psarc2gp-tabs";
+const MAIN_LOCK = "psarc2gp-main";
+export const HANDOVER_MS = 2000;
+let channel = null;
+let isMain = true;
+let mainKnown = Promise.resolve();
+let openedByBookmark = false; // this tab was opened by the bookmarklet (and may close itself)
+
+function joinTabs() {
+  openedByBookmark = !!window.opener && location.hash === "#/songsterr";
+  if (typeof BroadcastChannel !== "function" || !navigator.locks) return; // every tab keeps its own songs
+  channel = new BroadcastChannel(TABS_CHANNEL);
+  channel.addEventListener("message", onTabMessage);
+  const hold = () => new Promise(() => {}); // held until the tab closes
+  mainKnown = new Promise((known) => {
+    navigator.locks.request(MAIN_LOCK, { ifAvailable: true }, (lock) => {
+      isMain = !!lock;
+      known();
+      if (lock) return hold();
+      navigator.locks.request(MAIN_LOCK, () => { isMain = true; renderSong(); return hold(); });
+      return null;
+    }).catch(() => { isMain = true; known(); });
+  });
+}
+
+function onTabMessage({ data }) {
+  if (!isMain || data?.type !== "song" || !(Date.now() - data.sentAt < HANDOVER_MS)) return;
+  channel.postMessage({ type: "taken", id: data.id });
+  takeSong(data.bundle, data.password, { handedOver: true });
+}
+
+// → true once the main tab has taken it
+function handOver(bundle, password) {
+  return new Promise((resolve) => {
+    const id = crypto.randomUUID();
+    const done = (taken) => { clearTimeout(timer); channel.removeEventListener("message", taken_); resolve(taken); };
+    const taken_ = ({ data }) => { if (data?.type === "taken" && data.id === id) done(true); };
+    const timer = setTimeout(() => done(false), HANDOVER_MS);
+    channel.addEventListener("message", taken_);
+    channel.postMessage({ type: "song", id, sentAt: Date.now(), bundle, password });
+  });
+}
+
+async function onMessage(e) {
   if (e.origin !== SONGSTERR_ORIGIN || !e.data || typeof e.data !== "object") return;
   const reply = (data) => { try { e.source?.postMessage(data, e.origin); } catch { /* tab gone */ } };
   if (e.data.type === "psarc2gp-hello") {
     reply({ type: "psarc2gp-ready" });
-    if (!current || current.from !== "bookmarklet-wait") showWaiting();
+    if (!receiving) showWaiting();
     return;
   }
   if (e.data.type !== "psarc2gp-song") return;
+  const { bundle, password: pw } = e.data;
+  await mainKnown;
+  // only a tab that has nothing else to do passes songs on (one the user works in keeps what it's sent)
+  if (!isMain && channel && openedByBookmark && !songs.length && idle() && await handOver(bundle, pw)) {
+    reply({ type: "psarc2gp-received" });
+    receiving = false;
+    window.close(); // allowed: the bookmarklet opened this tab
+    // still open (the browser kept it)
+    $("ss-notice").textContent = `Sent ${songName(bundle)} to the tab2gp tab that was already open. You can close this one.`;
+    renderSong();
+    return;
+  }
   reply({ type: "psarc2gp-received" });
-  const pw = e.data.password;
+  takeSong(bundle, pw);
+}
+
+function takeSong(bundle, pw, { handedOver = false } = {}) {
   if (typeof pw === "string" && pw && pw !== currentPassword()) {
     unlock(pw).catch((err) => {
       if (err.code === "password") $("ss-notice").textContent = "The bookmark's password no longer opens the shared audio key: unlock with the new one on the Setup page, then drag the button again.";
     });
   }
-  openBundle(e.data.bundle, "bookmarklet");
+  // a song handed over from another tab doesn't stop the song playing here
+  const show = !(handedOver && location.hash.startsWith("#/play/"));
+  if (!show) notify(`${songName(bundle)} from Songsterr is waiting on the Songsterr page (Songs waiting, at the top).`);
+  openBundle(bundle, "bookmarklet", { show, select: !handedOver });
+}
+
+const songName = (bundle) => {
+  const s = bundle?.song;
+  return s?.artist || s?.title ? `“${[s.artist, s.title].filter(Boolean).join(" – ")}”` : "the song";
+};
+
+function showPage() {
+  if (location.hash !== "#/songsterr") location.hash = "#/songsterr";
 }
 
 function showWaiting() {
-  current = { from: "bookmarklet-wait" };
-  if (location.hash !== "#/songsterr") location.hash = "#/songsterr";
+  receiving = true;
+  showPage();
   renderSong();
 }
 
 export async function openSongFile(file) {
-  if (location.hash !== "#/songsterr") location.hash = "#/songsterr";
+  showPage();
   let bundle;
   try {
     bundle = JSON.parse(await file.text());
   } catch {
-    current = { error: `${file.name} isn't a song file saved from Songsterr (not JSON)` };
+    fileError = `${file.name} isn't a song file saved from Songsterr (not JSON)`;
     renderSong();
     return;
   }
   openBundle(bundle, "file");
 }
 
-async function openBundle(bundle, from) {
-  if (location.hash !== "#/songsterr") location.hash = "#/songsterr";
+// show: go to the Songsterr page; select: show this song in the form (a song handed over from another
+// tab only when the form is empty, so it doesn't replace the one being looked at)
+async function openBundle(bundle, from, { show = true, select = true } = {}) {
+  if (show) showPage();
+  receiving = false;
+  fileError = null;
   try {
     validateBundle(bundle);
   } catch (e) {
-    current = { error: e.message };
+    fileError = e.message;
+    renderSong();
+    return;
+  }
+  const same = songs.find((s) => s.bundle.song.songId === bundle.song.songId && s.bundle.song.revisionId === bundle.song.revisionId);
+  if (same) {
+    if (select || !current) current = same;
     renderSong();
     return;
   }
   bundle.trackData ??= bundle.song.tracks.map(() => null);
-  const me = (current = { bundle, from, info: null, inspecting: true });
+  const me = { bundle, from, info: null, inspecting: true };
+  songs.push(me);
+  if (select || !current) current = me;
   renderSong();
   // the tracks converted by default (every one with notes): they give the played-bar count, which says
   // which videos fit, and are kept for the conversion
@@ -322,7 +424,6 @@ async function openBundle(bundle, from) {
     return;
   }
   const answer = await ask({ kind: "songsterr-inspect", bundle, tracks: pick });
-  if (current !== me) return;
   me.inspecting = false;
   if (answer.ok) {
     me.info = answer.info;
@@ -333,17 +434,44 @@ async function openBundle(bundle, from) {
   renderSong();
 }
 
+// the song leaves the page (converted or removed); the next one takes its place in the form
+function dropSong(s) {
+  const i = songs.indexOf(s);
+  if (i < 0) return;
+  songs.splice(i, 1);
+  if (current === s) current = songs[i] ?? songs[i - 1] ?? null;
+}
+
+// the videos that fit, in the order the form lists them; the suggested one: chooseVideo's pick, else the first
+const RANK = { default: 0, alternative: 1, backing: 2, solo: 3, playthrough: 4 };
+const everywhere = (v) => !v.countries || v.countries.includes("All");
+const usableVideos = (info) => info.videos.filter((v) => v.fit)
+  .sort((a, b) => (RANK[a.feature] ?? 5) - (RANK[b.feature] ?? 5) || everywhere(b) - everywhere(a));
+function suggestedVideo(info) {
+  // info.videos carry the worker's fit (including videos with a stray point left out)
+  try { return chooseVideo(info.videos, "default", info.playedBars, info.bars).videoId; } catch { /* none fits */ }
+  return usableVideos(info)[0]?.videoId ?? "";
+}
+const pickedTracks = (s) => s.picks ?? defaultTrackIndices(s.bundle).filter((i) => convertible(s.bundle.song.tracks[i]));
+// ready for "Convert all": read, and a video fits
+const ready = (s) => !!s.info && !s.error && usableVideos(s.info).length > 0 && pickedTracks(s).length > 0;
+
+export const pageTitle = () => `${songs.length > 1 ? `(${songs.length}) ` : ""}Songs from Songsterr · tab2gp`;
+
 const convertible = (t) => !t.isEmpty;
+const checkedTracks = () => [...document.querySelectorAll('#ss-tracks input[name="track"]:checked')].map((i) => Number(i.value));
 
 function renderSong() {
   if (!ask) return;
   const c = current;
-  $("ss-waiting").hidden = c?.from !== "bookmarklet-wait";
-  $("ss-error").hidden = !c?.error;
-  $("ss-error").textContent = c?.error ? `Can't convert this song: ${c.error}` : "";
+  $("ss-waiting").hidden = !receiving;
+  const error = c?.error ?? fileError;
+  $("ss-error").hidden = !error;
+  $("ss-error").textContent = error ? `Can't convert this song: ${error}` : "";
+  renderList();
   const show = !!c?.bundle;
   $("ss-form").hidden = !show;
-  $("ss-empty").hidden = show || !!c;
+  $("ss-empty").hidden = show || receiving || !!error;
   if (!show) return;
   const { song } = c.bundle;
   $("ss-title").textContent = `${song.artist} – ${song.title}`;
@@ -351,24 +479,59 @@ function renderSong() {
     (c.from === "file" ? " · from a saved file" : "") + (c.info ? ` · ${c.info.bars} bars, ${c.info.playedBars} played with repeats` +
       (c.info.emptyBarsLeftOut ? ` (and ${c.info.emptyBarsLeftOut} empty bars at the end, left out)` : "") : "");
 
-  const defaults = new Set(defaultTrackIndices(c.bundle));
-  if (tracksShownFor !== c) $("ss-tracks").replaceChildren(...song.tracks.map((t, i) => {
-    const ok = convertible(t);
-    const why = t.isEmpty ? "empty" : trackKind(t) === "vocals" ? "vocals: notes and lyrics" : "";
-    return el("label", { className: `check${ok ? "" : " off"}` },
-      el("input", { type: "checkbox", name: "track", value: String(i), checked: ok && defaults.has(i), disabled: !ok }),
-      el("span", { textContent: t.name || `Track ${i + 1}` }),
-      el("span", { className: "muted", textContent: why || t.instrument || "" }));
-  }));
+  if (tracksShownFor !== c) {
+    const picked = new Set(pickedTracks(c));
+    $("ss-tracks").replaceChildren(...song.tracks.map((t, i) => {
+      const ok = convertible(t);
+      const why = t.isEmpty ? "empty" : trackKind(t) === "vocals" ? "vocals: notes and lyrics" : "";
+      return el("label", { className: `check${ok ? "" : " off"}` },
+        el("input", { type: "checkbox", name: "track", value: String(i), checked: ok && picked.has(i), disabled: !ok }),
+        el("span", { textContent: t.name || `Track ${i + 1}` }),
+        el("span", { className: "muted", textContent: why || t.instrument || "" }));
+    }));
+    // another song: an audio file picked for the last one isn't this one's
+    $("ss-audio-file").value = "";
+    $("ss-convert-message").textContent = "";
+  }
   tracksShownFor = c;
   renderTracksNote();
   renderVideos();
   renderAudio();
 }
 
+// "Songs waiting": shown with two songs or more, one line each; a click shows that song in the form
+function renderList() {
+  const box = $("ss-songs");
+  box.hidden = songs.length < 2;
+  const nav = $("nav-songsterr");
+  nav.hidden = !songs.length;
+  nav.textContent = `Songs waiting: ${songs.length}`;
+  if (location.hash === "#/songsterr") document.title = pageTitle();
+  if (box.hidden) return;
+  $("ss-songs-title").textContent = `${songs.length} songs waiting`;
+  $("ss-songs-list").replaceChildren(...songs.map((s) => {
+    const state = s.inspecting ? "Reading the tab…" : s.error ? "Can't convert" : !s.info ? "" :
+      !usableVideos(s.info).length ? "No video fits" : !pickedTracks(s).length ? "No track picked" : "Ready";
+    const li = el("li", { className: s === current ? "current" : "" },
+      el("button", { type: "button", className: "link", textContent: `${s.bundle.song.artist} – ${s.bundle.song.title}`,
+        onclick: () => { current = s; renderSong(); } }),
+      el("span", { className: `muted${state === "Ready" ? "" : " warn"}`, textContent: state }),
+      el("button", { type: "button", className: "quiet", title: "Remove from this list", textContent: "×",
+        onclick: () => { dropSong(s); renderSong(); } }));
+    if (s === current) li.setAttribute("aria-current", "true");
+    return li;
+  }));
+  const n = songs.filter(ready).length;
+  const all = $("ss-convert-all");
+  all.textContent = n === songs.length ? `Convert all ${n}` : `Convert the ${n} ready`;
+  all.disabled = !n || !isUnlocked();
+  $("ss-songs-note").textContent = !isUnlocked()
+    ? "Converting them all at once fetches each song's audio for you: unlock the shared audio key first (on the Setup page). Or convert them one by one with your own audio files."
+    : "Each with the tracks and video picked for it (the suggested ones unless you changed them), and the video's audio fetched for you.";
+}
+
 function renderTracksNote() {
-  const n = [...document.querySelectorAll('#ss-tracks input[name="track"]:checked')].length;
-  $("ss-tracks-note").textContent = n ? "" : "Pick at least one track.";
+  $("ss-tracks-note").textContent = checkedTracks().length ? "" : "Pick at least one track.";
 }
 
 function renderVideos() {
@@ -380,13 +543,8 @@ function renderVideos() {
     $("ss-video-note").textContent = "";
     return;
   }
-  const RANK = { default: 0, alternative: 1, backing: 2, solo: 3, playthrough: 4 };
-  const everywhere = (v) => !v.countries || v.countries.includes("All");
-  const usable = c.info.videos.filter((v) => v.fit)
-    .sort((a, b) => (RANK[a.feature] ?? 5) - (RANK[b.feature] ?? 5) || everywhere(b) - everywhere(a));
-  let preferred = null;
-  // c.info.videos carry the worker's fit (including videos with a stray point left out)
-  try { preferred = chooseVideo(c.info.videos, "default", c.info.playedBars, c.info.bars).videoId; } catch { /* none fits */ }
+  const usable = usableVideos(c.info);
+  const preferred = c.video ?? suggestedVideo(c.info);
   const names = c.bundle.song.tracks.map((t) => t.name);
   select.replaceChildren(...(usable.length ? [] : [el("option", { value: "", textContent: "No video fits" })]), ...usable.map((v) => {
     const parts = [FEATURE[v.feature] ?? v.feature];
@@ -412,6 +570,15 @@ function renderAudio() {
   // with no recording, a tab that no video fits still converts (without sync points)
   const busy = current.inspecting || !current.info || (choice !== "none" && !current.info.videos.some((v) => v.fit));
   $("ss-convert").disabled = busy;
+  if (songs.length > 1) renderList(); // "Convert all" waits for the key
+}
+
+// the song goes to the conversion queue; with more songs waiting the page stays, showing the next one
+function send(s, job) {
+  dropSong(s);
+  enqueue(job, { show: !songs.length });
+  if (songs.length) $("ss-notice").textContent = `${songName(s.bundle)} is converting: follow it in the library.`;
+  renderSong();
 }
 
 async function convert() {
@@ -419,7 +586,7 @@ async function convert() {
   if (!c?.bundle || !c.info) return;
   const message = $("ss-convert-message");
   message.textContent = "";
-  const tracks = [...document.querySelectorAll('#ss-tracks input[name="track"]:checked')].map((i) => Number(i.value));
+  const tracks = checkedTracks();
   if (!tracks.length) { message.textContent = "Pick at least one track."; return; }
   const video = $("ss-video").value;
   const choice = document.querySelector('#ss-form input[name="audio"]:checked')?.value ?? "fetch";
@@ -439,5 +606,28 @@ async function convert() {
     }
     if (!job.secrets) { message.textContent = "The kept password no longer opens the shared audio key: enter the new one."; renderAudio(); return; }
   }
-  enqueue(job);
+  if (current !== c) return; // another song was picked while the key was opened
+  send(c, job);
+}
+
+// every ready song, each with its own picks (or the suggested ones) and the audio fetched
+async function convertAll() {
+  const note = $("ss-songs-note");
+  let secrets;
+  try {
+    secrets = await getSecrets();
+  } catch (e) {
+    note.textContent = e.message;
+    return;
+  }
+  if (!secrets) { note.textContent = "The kept password no longer opens the shared audio key: unlock with the new one on the Setup page."; renderAudio(); return; }
+  const waiting = songs.length;
+  const go = songs.filter(ready);
+  for (const s of go) {
+    dropSong(s);
+    enqueue({ bundle: s.bundle, tracks: pickedTracks(s), video: s.video ?? suggestedVideo(s.info), audio: "fetch", secrets, name: songsterrOutputName(s.bundle.song) },
+      { show: !songs.length });
+  }
+  if (songs.length) $("ss-notice").textContent = `${go.length} of ${waiting} songs are converting (follow them in the library); the ones left here need a look.`;
+  renderSong();
 }

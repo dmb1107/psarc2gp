@@ -10,7 +10,10 @@
 
    Handoff: the app tab may still be loading, and window.opener may not survive, so this side says
    "hello" every 250 ms; the app answers "ready" to whoever said it (from www.songsterr.com only), gets
-   the song, and confirms with "received". Messages are sent to the app's origin only. */
+   the song, and confirms with "received". Messages are sent to the app's origin only.
+   Every click opens a new tab: when a tab2gp tab is already open, the new one passes the song to it and
+   closes (web/songsterr.js, "one tab for many songs"), so the browser comes back to this tab. A named
+   window would be brought to the front instead, and reloaded when its address differs. */
 (() => {
   const APP = "__APP__";
   const PASSWORD = "__PASSWORD__";
@@ -66,7 +69,7 @@
   const bundle = { kind: "psarc2gp-songsterr", version: 1, page: location.href.split("#")[0], savedAt: new Date().toISOString(), cdn, song, videos: null };
 
   /* open the app now, while the click still counts as a user gesture (popup blockers) */
-  const win = window.open(APP + "#/songsterr", "psarc2gp");
+  const win = window.open(APP + "#/songsterr", "_blank");
   const status = say(win ? "Opening tab2gp…" : "The browser blocked the new tab: allow pop-ups for songsterr.com and click again, or save the song below.");
 
   /* fallback: save the song as a file (with every track's tab) to open in tab2gp or the CLI */
@@ -107,7 +110,7 @@
     if (!win || e.source !== win || e.origin !== origin || !e.data) return;
     if (e.data.type === "psarc2gp-ready") { ready = true; clearInterval(hello); send(); }
     if (e.data.type === "psarc2gp-received") {
-      status.textContent = "Sent to tab2gp: carry on in its tab.";
+      status.textContent = "Sent to tab2gp: it waits there with the other songs you send.";
       status.style.color = "#9fe0a0";
       setTimeout(() => panel.remove(), 8000);
     }
